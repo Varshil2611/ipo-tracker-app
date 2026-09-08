@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 const money = (n) =>
   new Intl.NumberFormat("en-IN", {
@@ -71,9 +72,9 @@ function App() {
     try {
       const [dashboardResponse, ipoResponse, applicantResponse] =
         await Promise.all([
-          fetch("/api/dashboard").then((r) => r.json()),
-          fetch("/api/ipos").then((r) => r.json()),
-          fetch("/api/applicants").then((r) => r.json()),
+          fetch(`${API_URL}/api/dashboard`).then((r) => r.json()),
+          fetch(`${API_URL}/api/ipos`).then((r) => r.json()),
+          fetch(`${API_URL}/api/applicants`).then((r) => r.json()),
         ]);
 
       setDash(dashboardResponse.dashboard || {});
@@ -181,7 +182,7 @@ function App() {
 
   const adminLogin = async () => {
     try {
-      const response = await fetch("/api/admin/login", {
+      const response = await fetch(`${API_URL}/api/admin/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -194,7 +195,7 @@ function App() {
         return;
       }
 
-      const data = await fetch("/api/admin/data", {
+      const data = await fetch(`${API_URL}/api/admin/data`, {
         headers: {
           "x-admin-pin": pin,
         },
@@ -225,7 +226,7 @@ function App() {
     setSyncing(true);
 
     try {
-      const response = await fetch("/api/admin/sync", {
+      const response = await fetch(`${API_URL}/api/admin/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -242,7 +243,7 @@ function App() {
       await load();
 
       if (admin) {
-        const data = await fetch("/api/admin/data", {
+        const data = await fetch(`${API_URL}/api/admin/data`, {
           headers: {
             "x-admin-pin": pin,
           },
@@ -271,7 +272,7 @@ function App() {
     setSaving(true);
 
     try {
-      const response = await fetch("/api/admin/ipos", {
+      const response = await fetch(`${API_URL}/api/admin/ipos`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -310,7 +311,7 @@ function App() {
     setSaving(true);
 
     try {
-      const response = await fetch("/api/admin/applicants", {
+      const response = await fetch(`${API_URL}/api/admin/applicants`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
