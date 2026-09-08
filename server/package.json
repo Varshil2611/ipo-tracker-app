@@ -1,0 +1,21 @@
+{
+  "name": "ipo-tracker-server",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test-connection": "node scripts/test-connection.js",
+    "migrate": "node scripts/migrate-to-sheet.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "ipo-tracker-minimal": "file:.."
+  },
+  "devDependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
