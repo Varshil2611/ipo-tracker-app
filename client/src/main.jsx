@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
+const API_URL = import.meta.env.VITE_API_URL || "";
+
 const money = (n) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -52,8 +54,6 @@ function App() {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [minInvestment, setMinInvestment] = useState("");
-  const [maxInvestment, setMaxInvestment] = useState("");
 
   const [lastSync, setLastSync] = useState(null);
   const [nextSync, setNextSync] = useState(null);
@@ -68,13 +68,17 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
+  // ---------------------------------
+  // LOAD DATA FROM RENDER BACKEND
+  // ---------------------------------
+
   async function load() {
     try {
       const [dashboardResponse, ipoResponse, applicantResponse] =
         await Promise.all([
-          fetch("/api/dashboard").then((r) => r.json()),
-          fetch("/api/ipos").then((r) => r.json()),
-          fetch("/api/applicants").then((r) => r.json()),
+          fetch(`${API_URL}/api/dashboard`).then((r) => r.json()),
+          fetch(`${API_URL}/api/ipos`).then((r) => r.json()),
+          fetch(`${API_URL}/api/applicants`).then((r) => r.json()),
         ]);
 
       setDash(dashboardResponse.dashboard || {});
@@ -88,53 +92,82 @@ function App() {
     }
   }
 
+  // ---------------------------------
+  // INITIAL LOAD + 6 HOUR REFRESH
+  // ---------------------------------
+
   useEffect(() => {
     load();
 
+    // Refresh frontend every 6 hours
     const timer = setInterval(load, 6 * 60 * 60 * 1000);
 
     return () => clearInterval(timer);
   }, []);
 
+  // ---------------------------------
+  // BACK TO TOP
+  // ---------------------------------
+
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400);
+
     window.addEventListener("scroll", onScroll, { passive: true });
+
     onScroll();
+
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
-  // Sync available to every visitor, not just admins - re-reads the Excel file now.
+  // ---------------------------------
+  // PUBLIC GOOGLE SHEETS SYNC
+  // ---------------------------------
+
   const publicSync = async () => {
     setSyncing(true);
+
     try {
-      const response = await fetch("/api/sync", { method: "POST" });
+      const response = await fetch(`${API_URL}/api/sync`, {
+        method: "POST",
+      });
+
       if (!response.ok) {
-        alert("Could not sync Excel.");
+        alert("Could not sync Google Sheets.");
         return;
       }
+
       await load();
     } catch (error) {
       console.error(error);
-      alert("Could not sync Excel.");
+      alert("Could not sync Google Sheets.");
     } finally {
       setSyncing(false);
     }
   };
+
+  // ---------------------------------
+  // FILTER + SORT
+  // ---------------------------------
 
   const filtered = useMemo(() => {
     let list = ipos.filter((x) => {
       const d = x.date ? new Date(x.date).toISOString().slice(0, 10) : "";
 
       const ipoName = String(x.name || "").toLowerCase();
+
       const searchText = search.toLowerCase();
 
       const matchesSearch = ipoName.includes(searchText);
 
       const matchesDateFrom = !dateFrom || d >= dateFrom;
+
       const matchesDateTo = !dateTo || d <= dateTo;
 
       const matchesStatus =
@@ -144,20 +177,7 @@ function App() {
 
       const investmentValue = Number(x.investment ?? x.totalInvestment ?? 0);
 
-      const matchesMin =
-        !minInvestment || investmentValue >= Number(minInvestment);
-
-      const matchesMax =
-        !maxInvestment || investmentValue <= Number(maxInvestment);
-
-      return (
-        matchesSearch &&
-        matchesDateFrom &&
-        matchesDateTo &&
-        matchesStatus &&
-        matchesMin &&
-        matchesMax
-      );
+      return matchesSearch && matchesDateFrom && matchesDateTo && matchesStatus;
     });
 
     list.sort((a, b) => {
@@ -173,13 +193,6 @@ function App() {
         return Number(b.profit || 0) - Number(a.profit || 0);
       }
 
-      if (sort === "investment") {
-        return (
-          Number(b.investment ?? b.totalInvestment ?? 0) -
-          Number(a.investment ?? a.totalInvestment ?? 0)
-        );
-      }
-
       if (sort === "roi") {
         return Number(b.roi || 0) - Number(a.roi || 0);
       }
@@ -188,35 +201,30 @@ function App() {
     });
 
     return list;
-  }, [
-    ipos,
-    search,
-    status,
-    dateFrom,
-    dateTo,
-    minInvestment,
-    maxInvestment,
-    sort,
-  ]);
+  }, [ipos, search, status, dateFrom, dateTo, sort]);
 
   const clearFilters = () => {
     setSearch("");
     setStatus("all");
     setDateFrom("");
     setDateTo("");
-    setMinInvestment("");
-    setMaxInvestment("");
     setSort("dateDesc");
   };
 
+  // ---------------------------------
+  // ADMIN LOGIN
+  // ---------------------------------
+
   const adminLogin = async () => {
     try {
-      const response = await fetch("/api/admin/login", {
+      const response = await fetch(`${API_URL}/api/admin/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({
+          pin,
+        }),
       });
 
       if (!response.ok) {
@@ -224,7 +232,7 @@ function App() {
         return;
       }
 
-      const data = await fetch("/api/admin/data", {
+      const data = await fetch(`${API_URL}/api/admin/data`, {
         headers: {
           "x-admin-pin": pin,
         },
@@ -237,12 +245,17 @@ function App() {
 
       setAdminIpos(data.ipos || []);
       setAdminApps(data.applicants || []);
+
       setAdmin(true);
     } catch (error) {
       console.error(error);
       alert("Could not connect to the server.");
     }
   };
+
+  // ---------------------------------
+  // LOGOUT
+  // ---------------------------------
 
   const logout = () => {
     setAdmin(false);
@@ -251,16 +264,22 @@ function App() {
     setPin("");
   };
 
+  // ---------------------------------
+  // ADMIN GOOGLE SHEETS SYNC
+  // ---------------------------------
+
   const sync = async () => {
     setSyncing(true);
 
     try {
-      const response = await fetch("/api/admin/sync", {
+      const response = await fetch(`${API_URL}/api/admin/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({
+          pin,
+        }),
       });
 
       if (!response.ok) {
@@ -272,26 +291,31 @@ function App() {
       await load();
 
       if (admin) {
-        const data = await fetch("/api/admin/data", {
+        const data = await fetch(`${API_URL}/api/admin/data`, {
           headers: {
             "x-admin-pin": pin,
           },
         }).then((response) => response.json());
 
         setAdminIpos(data.ipos || []);
+
         setAdminApps(data.applicants || []);
       }
     } catch (error) {
       console.error(error);
-      alert("Could not sync Excel.");
+      alert("Could not sync Google Sheets.");
     } finally {
       setSyncing(false);
     }
   };
 
+  // ---------------------------------
+  // SAVE IPOs TO GOOGLE SHEETS
+  // ---------------------------------
+
   const saveIpos = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to save all IPO changes to Excel?",
+      "Are you sure you want to save all IPO changes to Google Sheets?",
     );
 
     if (!confirmed) {
@@ -301,7 +325,7 @@ function App() {
     setSaving(true);
 
     try {
-      const response = await fetch("/api/admin/ipos", {
+      const response = await fetch(`${API_URL}/api/admin/ipos`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -318,19 +342,25 @@ function App() {
         alert(data.error || "Could not save IPO changes.");
       } else {
         await load();
-        alert("IPO changes saved to Excel.");
+
+        alert("IPO changes saved to Google Sheets.");
       }
     } catch (error) {
       console.error(error);
+
       alert("Could not save IPO changes.");
     } finally {
       setSaving(false);
     }
   };
 
+  // ---------------------------------
+  // SAVE APPLICANTS TO GOOGLE SHEETS
+  // ---------------------------------
+
   const saveApps = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to save all applicant changes to Excel?",
+      "Are you sure you want to save all applicant changes to Google Sheets?",
     );
 
     if (!confirmed) {
@@ -340,7 +370,7 @@ function App() {
     setSaving(true);
 
     try {
-      const response = await fetch("/api/admin/applicants", {
+      const response = await fetch(`${API_URL}/api/admin/applicants`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -357,15 +387,21 @@ function App() {
         alert(data.error || "Could not save applicant changes.");
       } else {
         await load();
-        alert("Applicant changes saved to Excel.");
+
+        alert("Applicant changes saved to Google Sheets.");
       }
     } catch (error) {
       console.error(error);
+
       alert("Could not save applicant changes.");
     } finally {
       setSaving(false);
     }
   };
+
+  // ---------------------------------
+  // UPDATE IPO
+  // ---------------------------------
 
   const updateIpo = (index, key, value) => {
     setAdminIpos((current) =>
@@ -379,6 +415,10 @@ function App() {
       ),
     );
   };
+
+  // ---------------------------------
+  // UPDATE APPLICANT
+  // ---------------------------------
 
   const updateApp = (index, key, value) => {
     setAdminApps((current) =>
@@ -426,7 +466,7 @@ function App() {
             onClick={publicSync}
             disabled={syncing}
           >
-            {syncing ? "Syncing..." : "Sync Now"}
+            {syncing ? "Syncing..." : "Sync Google Sheets Now"}
           </button>
         </div>
       </header>
@@ -439,7 +479,10 @@ function App() {
 
           <Card label="Allotments" value={dash["Total Allotments"]} />
 
-          <Card label="Total Amount" value={money(dash["Total Amount"])} />
+          <Card
+            label="Total Amount"
+            value={money(530000 + Number(dash["Total Profit"] || 0))}
+          />
 
           <Card label="Profit" value={money(dash["Total Profit"])} />
         </section>
@@ -478,10 +521,6 @@ function App() {
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
-              minInvestment={minInvestment}
-              setMinInvestment={setMinInvestment}
-              maxInvestment={maxInvestment}
-              setMaxInvestment={setMaxInvestment}
               sort={sort}
               setSort={setSort}
               clearFilters={clearFilters}
@@ -704,7 +743,9 @@ function FilterBar({
 
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All status</option>
+
           <option value="allotted">Allotted</option>
+
           <option value="pending">No allotment</option>
         </select>
 
@@ -742,20 +783,6 @@ function FilterBar({
           />
         </label>
 
-        <input
-          type="number"
-          placeholder="Min investment"
-          value={minInvestment}
-          onChange={(e) => setMinInvestment(e.target.value)}
-        />
-
-        <input
-          type="number"
-          placeholder="Max investment"
-          value={maxInvestment}
-          onChange={(e) => setMaxInvestment(e.target.value)}
-        />
-
         <button className="lightBtn" onClick={clearFilters}>
           Clear
         </button>
@@ -786,17 +813,19 @@ function AdminPanel({
 
   const [newApplicant, setNewApplicant] = useState(blankApplicant());
 
-  // Editing an existing row opens a popup form pre-filled with its data,
-  // the same way "Add" does, instead of editing inline in the table.
   const [editIpoIndex, setEditIpoIndex] = useState(null);
+
   const [editIpoDraft, setEditIpoDraft] = useState(null);
 
   const [editApplicantIndex, setEditApplicantIndex] = useState(null);
+
   const [editApplicantDraft, setEditApplicantDraft] = useState(null);
 
   const openEditIpoModal = (index) => {
     setEditIpoIndex(index);
-    setEditIpoDraft({ ...adminIpos[index] });
+    setEditIpoDraft({
+      ...adminIpos[index],
+    });
   };
 
   const closeEditIpoModal = () => {
@@ -806,13 +835,21 @@ function AdminPanel({
 
   const openEditApplicantModal = (index) => {
     setEditApplicantIndex(index);
-    setEditApplicantDraft({ ...adminApps[index] });
+
+    setEditApplicantDraft({
+      ...adminApps[index],
+    });
   };
 
   const closeEditApplicantModal = () => {
     setEditApplicantIndex(null);
+
     setEditApplicantDraft(null);
   };
+
+  // ---------------------------------
+  // EDIT IPO
+  // ---------------------------------
 
   const saveEditIpo = () => {
     if (!String(editIpoDraft.name || "").trim()) {
@@ -835,11 +872,17 @@ function AdminPanel({
 
     const updatedIpo = {
       ...editIpoDraft,
+
       name: String(editIpoDraft.name).trim(),
+
       applicants: Number(editIpoDraft.applicants) || 0,
+
       retailAmount: Number(editIpoDraft.retailAmount) || 0,
+
       investment: Number(editIpoDraft.investment) || 0,
+
       allotments: Number(editIpoDraft.allotments) || 0,
+
       profit: Number(editIpoDraft.profit) || 0,
     };
 
@@ -851,6 +894,10 @@ function AdminPanel({
 
     closeEditIpoModal();
   };
+
+  // ---------------------------------
+  // EDIT APPLICANT
+  // ---------------------------------
 
   const saveEditApplicant = () => {
     if (!String(editApplicantDraft.name || "").trim()) {
@@ -878,9 +925,13 @@ function AdminPanel({
 
     const updatedApplicant = {
       ...editApplicantDraft,
+
       name: String(editApplicantDraft.name).trim(),
+
       depository: String(editApplicantDraft.depository).trim(),
+
       pan: String(editApplicantDraft.pan).trim(),
+
       beneficiaryId: String(editApplicantDraft.beneficiaryId).trim(),
     };
 
@@ -893,6 +944,10 @@ function AdminPanel({
     closeEditApplicantModal();
   };
 
+  // ---------------------------------
+  // ADD IPO MODAL
+  // ---------------------------------
+
   const openIpoModal = () => {
     setNewIpo(blankIpo());
     setShowIpoModal(true);
@@ -903,8 +958,13 @@ function AdminPanel({
     setNewIpo(blankIpo());
   };
 
+  // ---------------------------------
+  // ADD APPLICANT MODAL
+  // ---------------------------------
+
   const openApplicantModal = () => {
     setNewApplicant(blankApplicant());
+
     setShowApplicantModal(true);
   };
 
@@ -913,7 +973,10 @@ function AdminPanel({
     setNewApplicant(blankApplicant());
   };
 
-  // Let Escape close whichever modal is currently open.
+  // ---------------------------------
+  // ESCAPE KEY FOR MODALS
+  // ---------------------------------
+
   useEffect(() => {
     const anyModalOpen =
       showIpoModal ||
@@ -927,16 +990,32 @@ function AdminPanel({
 
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
-        if (showIpoModal) closeIpoModal();
-        if (showApplicantModal) closeApplicantModal();
-        if (editIpoIndex !== null) closeEditIpoModal();
-        if (editApplicantIndex !== null) closeEditApplicantModal();
+        if (showIpoModal) {
+          closeIpoModal();
+        }
+
+        if (showApplicantModal) {
+          closeApplicantModal();
+        }
+
+        if (editIpoIndex !== null) {
+          closeEditIpoModal();
+        }
+
+        if (editApplicantIndex !== null) {
+          closeEditApplicantModal();
+        }
       }
     };
 
     document.addEventListener("keydown", onKeyDown);
+
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [showIpoModal, showApplicantModal, editIpoIndex, editApplicantIndex]);
+
+  // ---------------------------------
+  // ADD IPO
+  // ---------------------------------
 
   const addIpo = () => {
     if (!String(newIpo.name || "").trim()) {
@@ -979,12 +1058,19 @@ function AdminPanel({
 
     const ipoToAdd = {
       ...newIpo,
+
       id: newIpo.id || Date.now(),
+
       name: String(newIpo.name).trim(),
+
       applicants: Number(newIpo.applicants) || 0,
+
       retailAmount: Number(newIpo.retailAmount) || 0,
+
       investment: Number(newIpo.investment) || 0,
+
       allotments: Number(newIpo.allotments) || 0,
+
       profit: Number(newIpo.profit) || 0,
     };
 
@@ -992,6 +1078,10 @@ function AdminPanel({
 
     closeIpoModal();
   };
+
+  // ---------------------------------
+  // ADD APPLICANT
+  // ---------------------------------
 
   const addApplicant = () => {
     if (!String(newApplicant.name || "").trim()) {
@@ -1030,9 +1120,13 @@ function AdminPanel({
 
     const applicantToAdd = {
       ...newApplicant,
+
       name: String(newApplicant.name).trim(),
+
       depository: String(newApplicant.depository).trim(),
+
       pan: String(newApplicant.pan).trim(),
+
       beneficiaryId: String(newApplicant.beneficiaryId).trim(),
     };
 
@@ -1041,6 +1135,10 @@ function AdminPanel({
     closeApplicantModal();
   };
 
+  // ---------------------------------
+  // SAVE
+  // ---------------------------------
+
   const handleSaveIpos = async () => {
     await saveIpos();
   };
@@ -1048,6 +1146,10 @@ function AdminPanel({
   const handleSaveApps = async () => {
     await saveApps();
   };
+
+  // ---------------------------------
+  // DELETE IPO
+  // ---------------------------------
 
   const deleteIpo = (index, name) => {
     const confirmed = window.confirm(
@@ -1062,6 +1164,10 @@ function AdminPanel({
       current.filter((_, itemIndex) => itemIndex !== index),
     );
   };
+
+  // ---------------------------------
+  // DELETE APPLICANT
+  // ---------------------------------
 
   const deleteApplicant = (index, name) => {
     const confirmed = window.confirm(
@@ -1094,10 +1200,14 @@ function AdminPanel({
           </button>
 
           <button onClick={sync} disabled={syncing}>
-            {syncing ? "Syncing..." : "Sync Excel Now"}
+            {syncing ? "Syncing..." : "Sync Google Sheets Now"}
           </button>
         </div>
       </div>
+
+      {/* ---------------------------------
+          IPO ADMIN SECTION
+      ---------------------------------- */}
 
       <div className="adminSection">
         <div className="sectionTitle">
@@ -1190,6 +1300,10 @@ function AdminPanel({
         </div>
       </div>
 
+      {/* ---------------------------------
+          APPLICANT ADMIN SECTION
+      ---------------------------------- */}
+
       <div className="adminSection">
         <div className="sectionTitle">
           <h3>Applicant Details</h3>
@@ -1210,9 +1324,13 @@ function AdminPanel({
             <thead>
               <tr>
                 <th>Applicant Name</th>
+
                 <th>Depository</th>
+
                 <th>PAN Card Number</th>
+
                 <th>Beneficiary Number/ID</th>
+
                 <th className="actionCol">Action</th>
               </tr>
             </thead>
@@ -1261,6 +1379,10 @@ function AdminPanel({
           </table>
         </div>
       </div>
+
+      {/* ---------------------------------
+          ADD IPO MODAL
+      ---------------------------------- */}
 
       {showIpoModal && (
         <div
@@ -1423,6 +1545,10 @@ function AdminPanel({
         </div>
       )}
 
+      {/* ---------------------------------
+          ADD APPLICANT MODAL
+      ---------------------------------- */}
+
       {showApplicantModal && (
         <div
           className="modalOverlay"
@@ -1536,6 +1662,10 @@ function AdminPanel({
           </div>
         </div>
       )}
+
+      {/* ---------------------------------
+          EDIT IPO MODAL
+      ---------------------------------- */}
 
       {editIpoIndex !== null && editIpoDraft && (
         <div
@@ -1697,6 +1827,10 @@ function AdminPanel({
           </div>
         </div>
       )}
+
+      {/* ---------------------------------
+          EDIT APPLICANT MODAL
+      ---------------------------------- */}
 
       {editApplicantIndex !== null && editApplicantDraft && (
         <div
