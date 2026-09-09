@@ -100,7 +100,7 @@ function App() {
     load();
 
     // Refresh frontend every 6 hours
-    const timer = setInterval(load, 6 * 60 * 60 * 1000);
+    const timer = setInterval(load, 12 * 60 * 60 * 1000);
 
     return () => clearInterval(timer);
   }, []);
