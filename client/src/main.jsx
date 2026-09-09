@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-const API_URL = import.meta.env.VITE_API_URL || "";
 
 const money = (n) =>
   new Intl.NumberFormat("en-IN", {
@@ -67,14 +66,15 @@ function App() {
 
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   async function load() {
     try {
       const [dashboardResponse, ipoResponse, applicantResponse] =
         await Promise.all([
-          fetch(`${API_URL}/api/dashboard`).then((r) => r.json()),
-          fetch(`${API_URL}/api/ipos`).then((r) => r.json()),
-          fetch(`${API_URL}/api/applicants`).then((r) => r.json()),
+          fetch("/api/dashboard").then((r) => r.json()),
+          fetch("/api/ipos").then((r) => r.json()),
+          fetch("/api/applicants").then((r) => r.json()),
         ]);
 
       setDash(dashboardResponse.dashboard || {});
@@ -91,10 +91,39 @@ function App() {
   useEffect(() => {
     load();
 
-    const timer = setInterval(load, 5 * 60 * 1000);
+    const timer = setInterval(load, 6 * 60 * 60 * 1000);
 
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 400);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Sync available to every visitor, not just admins - re-reads the Excel file now.
+  const publicSync = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch("/api/sync", { method: "POST" });
+      if (!response.ok) {
+        alert("Could not sync Excel.");
+        return;
+      }
+      await load();
+    } catch (error) {
+      console.error(error);
+      alert("Could not sync Excel.");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = ipos.filter((x) => {
@@ -182,7 +211,7 @@ function App() {
 
   const adminLogin = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/admin/login`, {
+      const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -195,7 +224,7 @@ function App() {
         return;
       }
 
-      const data = await fetch(`${API_URL}/api/admin/data`, {
+      const data = await fetch("/api/admin/data", {
         headers: {
           "x-admin-pin": pin,
         },
@@ -226,7 +255,7 @@ function App() {
     setSyncing(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/admin/sync`, {
+      const response = await fetch("/api/admin/sync", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -243,7 +272,7 @@ function App() {
       await load();
 
       if (admin) {
-        const data = await fetch(`${API_URL}/api/admin/data`, {
+        const data = await fetch("/api/admin/data", {
           headers: {
             "x-admin-pin": pin,
           },
@@ -254,7 +283,7 @@ function App() {
       }
     } catch (error) {
       console.error(error);
-      alert("Could not sync the Google Sheet.");
+      alert("Could not sync Excel.");
     } finally {
       setSyncing(false);
     }
@@ -262,7 +291,7 @@ function App() {
 
   const saveIpos = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to save all IPO changes to your Google Sheet?",
+      "Are you sure you want to save all IPO changes to Excel?",
     );
 
     if (!confirmed) {
@@ -272,7 +301,7 @@ function App() {
     setSaving(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/admin/ipos`, {
+      const response = await fetch("/api/admin/ipos", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -289,7 +318,7 @@ function App() {
         alert(data.error || "Could not save IPO changes.");
       } else {
         await load();
-        alert("IPO changes saved to your Google Sheet.");
+        alert("IPO changes saved to Excel.");
       }
     } catch (error) {
       console.error(error);
@@ -301,7 +330,7 @@ function App() {
 
   const saveApps = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to save all applicant changes to your Google Sheet?",
+      "Are you sure you want to save all applicant changes to Excel?",
     );
 
     if (!confirmed) {
@@ -311,7 +340,7 @@ function App() {
     setSaving(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/admin/applicants`, {
+      const response = await fetch("/api/admin/applicants", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -328,7 +357,7 @@ function App() {
         alert(data.error || "Could not save applicant changes.");
       } else {
         await load();
-        alert("Applicant changes saved to your Google Sheet.");
+        alert("Applicant changes saved to Excel.");
       }
     } catch (error) {
       console.error(error);
@@ -391,6 +420,14 @@ function App() {
                 })
               : "—"}
           </small>
+          <button
+            type="button"
+            className="lightBtn syncNowBtn"
+            onClick={publicSync}
+            disabled={syncing}
+          >
+            {syncing ? "Syncing..." : "Sync Now"}
+          </button>
         </div>
       </header>
 
@@ -402,7 +439,7 @@ function App() {
 
           <Card label="Allotments" value={dash["Total Allotments"]} />
 
-          <Card label="Total Investment" value={money(dash["Total Amount"])} />
+          <Card label="Total Amount" value={money(dash["Total Amount"])} />
 
           <Card label="Profit" value={money(dash["Total Profit"])} />
         </section>
@@ -623,6 +660,18 @@ function App() {
 
         <footer>Built with ❤️ by Varshil</footer>
       </main>
+
+      {showBackToTop && (
+        <button
+          type="button"
+          className="backToTop"
+          onClick={scrollToTop}
+          aria-label="Back to top"
+          title="Back to top"
+        >
+          ↑
+        </button>
+      )}
     </div>
   );
 }
@@ -737,32 +786,111 @@ function AdminPanel({
 
   const [newApplicant, setNewApplicant] = useState(blankApplicant());
 
-  // Rows are read-only until the admin explicitly clicks "Edit" on them.
-  const [editingIpoIds, setEditingIpoIds] = useState(() => new Set());
-  const [editingAppRows, setEditingAppRows] = useState(() => new Set());
+  // Editing an existing row opens a popup form pre-filled with its data,
+  // the same way "Add" does, instead of editing inline in the table.
+  const [editIpoIndex, setEditIpoIndex] = useState(null);
+  const [editIpoDraft, setEditIpoDraft] = useState(null);
 
-  const toggleIpoEdit = (id) => {
-    setEditingIpoIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const [editApplicantIndex, setEditApplicantIndex] = useState(null);
+  const [editApplicantDraft, setEditApplicantDraft] = useState(null);
+
+  const openEditIpoModal = (index) => {
+    setEditIpoIndex(index);
+    setEditIpoDraft({ ...adminIpos[index] });
   };
 
-  const toggleAppEdit = (index) => {
-    setEditingAppRows((current) => {
-      const next = new Set(current);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
+  const closeEditIpoModal = () => {
+    setEditIpoIndex(null);
+    setEditIpoDraft(null);
+  };
+
+  const openEditApplicantModal = (index) => {
+    setEditApplicantIndex(index);
+    setEditApplicantDraft({ ...adminApps[index] });
+  };
+
+  const closeEditApplicantModal = () => {
+    setEditApplicantIndex(null);
+    setEditApplicantDraft(null);
+  };
+
+  const saveEditIpo = () => {
+    if (!String(editIpoDraft.name || "").trim()) {
+      alert("Please enter the IPO name.");
+      return;
+    }
+
+    if (!editIpoDraft.date) {
+      alert("Please select the IPO date.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Save changes to "' + editIpoDraft.name + '"?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const updatedIpo = {
+      ...editIpoDraft,
+      name: String(editIpoDraft.name).trim(),
+      applicants: Number(editIpoDraft.applicants) || 0,
+      retailAmount: Number(editIpoDraft.retailAmount) || 0,
+      investment: Number(editIpoDraft.investment) || 0,
+      allotments: Number(editIpoDraft.allotments) || 0,
+      profit: Number(editIpoDraft.profit) || 0,
+    };
+
+    setAdminIpos((current) =>
+      current.map((item, index) =>
+        index === editIpoIndex ? updatedIpo : item,
+      ),
+    );
+
+    closeEditIpoModal();
+  };
+
+  const saveEditApplicant = () => {
+    if (!String(editApplicantDraft.name || "").trim()) {
+      alert("Please enter the applicant name.");
+      return;
+    }
+
+    if (!String(editApplicantDraft.pan || "").trim()) {
+      alert("Please enter the PAN card number.");
+      return;
+    }
+
+    if (!String(editApplicantDraft.beneficiaryId || "").trim()) {
+      alert("Please enter the beneficiary ID.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Save changes to "' + editApplicantDraft.name + '"?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const updatedApplicant = {
+      ...editApplicantDraft,
+      name: String(editApplicantDraft.name).trim(),
+      depository: String(editApplicantDraft.depository).trim(),
+      pan: String(editApplicantDraft.pan).trim(),
+      beneficiaryId: String(editApplicantDraft.beneficiaryId).trim(),
+    };
+
+    setAdminApps((current) =>
+      current.map((item, index) =>
+        index === editApplicantIndex ? updatedApplicant : item,
+      ),
+    );
+
+    closeEditApplicantModal();
   };
 
   const openIpoModal = () => {
@@ -787,7 +915,13 @@ function AdminPanel({
 
   // Let Escape close whichever modal is currently open.
   useEffect(() => {
-    if (!showIpoModal && !showApplicantModal) {
+    const anyModalOpen =
+      showIpoModal ||
+      showApplicantModal ||
+      editIpoIndex !== null ||
+      editApplicantIndex !== null;
+
+    if (!anyModalOpen) {
       return;
     }
 
@@ -795,12 +929,14 @@ function AdminPanel({
       if (e.key === "Escape") {
         if (showIpoModal) closeIpoModal();
         if (showApplicantModal) closeApplicantModal();
+        if (editIpoIndex !== null) closeEditIpoModal();
+        if (editApplicantIndex !== null) closeEditApplicantModal();
       }
     };
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showIpoModal, showApplicantModal]);
+  }, [showIpoModal, showApplicantModal, editIpoIndex, editApplicantIndex]);
 
   const addIpo = () => {
     if (!String(newIpo.name || "").trim()) {
@@ -907,12 +1043,10 @@ function AdminPanel({
 
   const handleSaveIpos = async () => {
     await saveIpos();
-    setEditingIpoIds(new Set());
   };
 
   const handleSaveApps = async () => {
     await saveApps();
-    setEditingAppRows(new Set());
   };
 
   const deleteIpo = (index, name) => {
@@ -924,17 +1058,9 @@ function AdminPanel({
       return;
     }
 
-    setAdminIpos((current) => {
-      const removed = current[index];
-      if (removed) {
-        setEditingIpoIds((editing) => {
-          const next = new Set(editing);
-          next.delete(removed.id);
-          return next;
-        });
-      }
-      return current.filter((_, itemIndex) => itemIndex !== index);
-    });
+    setAdminIpos((current) =>
+      current.filter((_, itemIndex) => itemIndex !== index),
+    );
   };
 
   const deleteApplicant = (index, name) => {
@@ -951,16 +1077,6 @@ function AdminPanel({
     setAdminApps((current) =>
       current.filter((_, itemIndex) => itemIndex !== index),
     );
-
-    // Keep the editing-row indexes aligned now that a row has shifted up.
-    setEditingAppRows((current) => {
-      const next = new Set();
-      current.forEach((rowIndex) => {
-        if (rowIndex === index) return;
-        next.add(rowIndex > index ? rowIndex - 1 : rowIndex);
-      });
-      return next;
-    });
   };
 
   return (
@@ -978,7 +1094,7 @@ function AdminPanel({
           </button>
 
           <button onClick={sync} disabled={syncing}>
-            {syncing ? "Syncing..." : "Sync Google Sheet Now"}
+            {syncing ? "Syncing..." : "Sync Excel Now"}
           </button>
         </div>
       </div>
@@ -1014,153 +1130,55 @@ function AdminPanel({
             </thead>
 
             <tbody>
-              {adminIpos.map((x, index) => {
-                const isEditing = editingIpoIds.has(x.id);
+              {adminIpos.map((x, index) => (
+                <tr key={x.id || index}>
+                  <td data-label="Date">{dateFmt(x.date)}</td>
 
-                return (
-                  <tr
-                    key={x.id || index}
-                    className={isEditing ? "editingRow" : ""}
-                  >
-                    <td data-label="Date">
-                      {isEditing ? (
-                        <input
-                          type="date"
-                          value={dateInput(x.date)}
-                          onChange={(e) =>
-                            updateIpo(index, "date", e.target.value)
-                          }
-                        />
-                      ) : (
-                        dateFmt(x.date)
-                      )}
-                    </td>
+                  <td className="strong" data-label="IPO Name">
+                    {x.name}
+                  </td>
 
-                    <td
-                      className={isEditing ? "" : "strong"}
-                      data-label="IPO Name"
-                    >
-                      {isEditing ? (
-                        <input
-                          value={x.name || ""}
-                          onChange={(e) =>
-                            updateIpo(index, "name", e.target.value)
-                          }
-                        />
-                      ) : (
-                        x.name
-                      )}
-                    </td>
+                  <td className="num" data-label="Applicants">
+                    {x.applicants ?? 0}
+                  </td>
 
-                    <td
-                      className={isEditing ? "" : "num"}
-                      data-label="Applicants"
-                    >
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          value={x.applicants ?? 0}
-                          onChange={(e) =>
-                            updateIpo(index, "applicants", e.target.value)
-                          }
-                        />
-                      ) : (
-                        (x.applicants ?? 0)
-                      )}
-                    </td>
+                  <td className="num" data-label="Retail Amount">
+                    {money(x.retailAmount)}
+                  </td>
 
-                    <td
-                      className={isEditing ? "" : "num"}
-                      data-label="Retail Amount"
-                    >
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          value={x.retailAmount ?? 0}
-                          onChange={(e) =>
-                            updateIpo(index, "retailAmount", e.target.value)
-                          }
-                        />
-                      ) : (
-                        money(x.retailAmount)
-                      )}
-                    </td>
+                  <td className="num" data-label="Investment">
+                    {money(x.investment ?? x.totalInvestment ?? 0)}
+                  </td>
 
-                    <td
-                      className={isEditing ? "" : "num"}
-                      data-label="Investment"
-                    >
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          value={x.investment ?? x.totalInvestment ?? 0}
-                          onChange={(e) =>
-                            updateIpo(index, "investment", e.target.value)
-                          }
-                        />
-                      ) : (
-                        money(x.investment ?? x.totalInvestment ?? 0)
-                      )}
-                    </td>
+                  <td className="num" data-label="Allotments">
+                    {x.allotments ?? 0}
+                  </td>
 
-                    <td
-                      className={isEditing ? "" : "num"}
-                      data-label="Allotments"
-                    >
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          value={x.allotments ?? 0}
-                          onChange={(e) =>
-                            updateIpo(index, "allotments", e.target.value)
-                          }
-                        />
-                      ) : (
-                        (x.allotments ?? 0)
-                      )}
-                    </td>
+                  <td className="num" data-label="Profit">
+                    {money(x.profit)}
+                  </td>
 
-                    <td className={isEditing ? "" : "num"} data-label="Profit">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          value={x.profit ?? 0}
-                          onChange={(e) =>
-                            updateIpo(index, "profit", e.target.value)
-                          }
-                        />
-                      ) : (
-                        money(x.profit)
-                      )}
-                    </td>
+                  <td className="actionCol" data-label="Action">
+                    <div className="actionsCell">
+                      <button
+                        type="button"
+                        className="lightBtn"
+                        onClick={() => openEditIpoModal(index)}
+                      >
+                        Edit
+                      </button>
 
-                    <td className="actionCol" data-label="Action">
-                      <div className="actionsCell">
-                        <button
-                          type="button"
-                          className={isEditing ? "" : "lightBtn"}
-                          onClick={() => toggleIpoEdit(x.id)}
-                        >
-                          {isEditing ? "Done" : "Edit"}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="dangerBtn"
-                          onClick={() => deleteIpo(index, x.name)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      <button
+                        type="button"
+                        className="dangerBtn"
+                        onClick={() => deleteIpo(index, x.name)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
 
               {adminIpos.length === 0 && (
                 <tr>
@@ -1200,95 +1218,39 @@ function AdminPanel({
             </thead>
 
             <tbody>
-              {adminApps.map((x, index) => {
-                const isEditing = editingAppRows.has(index);
+              {adminApps.map((x, index) => (
+                <tr key={index}>
+                  <td className="strong" data-label="Applicant Name">
+                    {x.name}
+                  </td>
 
-                return (
-                  <tr key={index} className={isEditing ? "editingRow" : ""}>
-                    <td
-                      className={isEditing ? "" : "strong"}
-                      data-label="Applicant Name"
-                    >
-                      {isEditing ? (
-                        <input
-                          value={x.name || ""}
-                          onChange={(e) =>
-                            updateApp(index, "name", e.target.value)
-                          }
-                        />
-                      ) : (
-                        x.name
-                      )}
-                    </td>
+                  <td data-label="Depository">{x.depository}</td>
 
-                    <td data-label="Depository">
-                      {isEditing ? (
-                        <select
-                          value={x.depository || "CDSL"}
-                          onChange={(e) =>
-                            updateApp(index, "depository", e.target.value)
-                          }
-                        >
-                          <option value="CDSL">CDSL</option>
-                          <option value="NSDL">NSDL</option>
-                        </select>
-                      ) : (
-                        x.depository
-                      )}
-                    </td>
+                  <td data-label="PAN Card Number">{x.pan}</td>
 
-                    <td data-label="PAN Card Number">
-                      {isEditing ? (
-                        <input
-                          value={x.pan || ""}
-                          onChange={(e) =>
-                            updateApp(
-                              index,
-                              "pan",
-                              e.target.value.toUpperCase(),
-                            )
-                          }
-                        />
-                      ) : (
-                        x.pan
-                      )}
-                    </td>
+                  <td data-label="Beneficiary Number/ID">{x.beneficiaryId}</td>
 
-                    <td data-label="Beneficiary Number/ID">
-                      {isEditing ? (
-                        <input
-                          value={x.beneficiaryId || ""}
-                          onChange={(e) =>
-                            updateApp(index, "beneficiaryId", e.target.value)
-                          }
-                        />
-                      ) : (
-                        x.beneficiaryId
-                      )}
-                    </td>
+                  <td className="actionCol" data-label="Action">
+                    <div className="actionsCell">
+                      <button
+                        type="button"
+                        className="lightBtn"
+                        onClick={() => openEditApplicantModal(index)}
+                      >
+                        Edit
+                      </button>
 
-                    <td className="actionCol" data-label="Action">
-                      <div className="actionsCell">
-                        <button
-                          type="button"
-                          className={isEditing ? "" : "lightBtn"}
-                          onClick={() => toggleAppEdit(index)}
-                        >
-                          {isEditing ? "Done" : "Edit"}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="dangerBtn"
-                          onClick={() => deleteApplicant(index, x.name)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      <button
+                        type="button"
+                        className="dangerBtn"
+                        onClick={() => deleteApplicant(index, x.name)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
 
               {adminApps.length === 0 && (
                 <tr>
@@ -1569,6 +1531,281 @@ function AdminPanel({
 
               <button type="button" onClick={addApplicant}>
                 Add Applicant
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editIpoIndex !== null && editIpoDraft && (
+        <div
+          className="modalOverlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeEditIpoModal();
+            }
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-ipo-title"
+          >
+            <div className="modalHeader">
+              <div>
+                <h2 id="edit-ipo-title">Edit IPO</h2>
+
+                <p>Update the IPO details below.</p>
+              </div>
+
+              <button
+                type="button"
+                className="modalClose"
+                onClick={closeEditIpoModal}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modalForm">
+              <label>
+                IPO Date
+                <input
+                  type="date"
+                  value={dateInput(editIpoDraft.date)}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                IPO Name
+                <input
+                  type="text"
+                  placeholder="Enter IPO name"
+                  value={editIpoDraft.name}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      name: e.target.value,
+                    })
+                  }
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                Applicants
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editIpoDraft.applicants}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      applicants: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Retail Amount
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editIpoDraft.retailAmount}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      retailAmount: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Total Investment
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editIpoDraft.investment}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      investment: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Allotments
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editIpoDraft.allotments}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      allotments: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Profit
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editIpoDraft.profit}
+                  onChange={(e) =>
+                    setEditIpoDraft({
+                      ...editIpoDraft,
+                      profit: e.target.value,
+                    })
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="modalActions">
+              <button
+                type="button"
+                className="lightBtn"
+                onClick={closeEditIpoModal}
+              >
+                Cancel
+              </button>
+
+              <button type="button" onClick={saveEditIpo}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editApplicantIndex !== null && editApplicantDraft && (
+        <div
+          className="modalOverlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeEditApplicantModal();
+            }
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-applicant-title"
+          >
+            <div className="modalHeader">
+              <div>
+                <h2 id="edit-applicant-title">Edit Applicant</h2>
+
+                <p>Update the applicant details below.</p>
+              </div>
+
+              <button
+                type="button"
+                className="modalClose"
+                onClick={closeEditApplicantModal}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modalForm">
+              <label>
+                Applicant Name
+                <input
+                  type="text"
+                  placeholder="Enter applicant name"
+                  value={editApplicantDraft.name}
+                  onChange={(e) =>
+                    setEditApplicantDraft({
+                      ...editApplicantDraft,
+                      name: e.target.value,
+                    })
+                  }
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                Depository
+                <select
+                  value={editApplicantDraft.depository}
+                  onChange={(e) =>
+                    setEditApplicantDraft({
+                      ...editApplicantDraft,
+                      depository: e.target.value,
+                    })
+                  }
+                >
+                  <option value="CDSL">CDSL</option>
+
+                  <option value="NSDL">NSDL</option>
+                </select>
+              </label>
+
+              <label>
+                PAN Card Number
+                <input
+                  type="text"
+                  placeholder="Enter PAN number"
+                  value={editApplicantDraft.pan}
+                  onChange={(e) =>
+                    setEditApplicantDraft({
+                      ...editApplicantDraft,
+                      pan: e.target.value.toUpperCase(),
+                    })
+                  }
+                />
+              </label>
+
+              <label>
+                Beneficiary Number / ID
+                <input
+                  type="text"
+                  placeholder="Enter beneficiary ID"
+                  value={editApplicantDraft.beneficiaryId}
+                  onChange={(e) =>
+                    setEditApplicantDraft({
+                      ...editApplicantDraft,
+                      beneficiaryId: e.target.value,
+                    })
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="modalActions">
+              <button
+                type="button"
+                className="lightBtn"
+                onClick={closeEditApplicantModal}
+              >
+                Cancel
+              </button>
+
+              <button type="button" onClick={saveEditApplicant}>
+                Save Changes
               </button>
             </div>
           </div>

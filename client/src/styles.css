@@ -36,12 +36,16 @@
   --radius-lg: 18px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(23, 28, 48, 0.06), 0 1px 1px rgba(23, 28, 48, 0.04);
-  --shadow-md: 0 8px 24px rgba(23, 28, 48, 0.10), 0 2px 6px rgba(23, 28, 48, 0.06);
-  --shadow-lg: 0 24px 60px rgba(12, 16, 32, 0.28), 0 8px 20px rgba(12, 16, 32, 0.16);
+  --shadow-sm:
+    0 1px 2px rgba(23, 28, 48, 0.06), 0 1px 1px rgba(23, 28, 48, 0.04);
+  --shadow-md:
+    0 8px 24px rgba(23, 28, 48, 0.1), 0 2px 6px rgba(23, 28, 48, 0.06);
+  --shadow-lg:
+    0 24px 60px rgba(12, 16, 32, 0.28), 0 8px 20px rgba(12, 16, 32, 0.16);
 
   --font-display: "Fraunces", "Iowan Old Style", ui-serif, Georgia, serif;
-  --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-ui:
+    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   font-family: var(--font-ui);
@@ -74,7 +78,9 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
@@ -121,6 +127,9 @@ header p {
   color: #cfd6e8;
   text-align: right;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .sync small {
@@ -128,6 +137,41 @@ header p {
   margin-top: 2px;
   color: #8b96b3;
   font-size: 12px;
+}
+
+.syncNowBtn {
+  padding: 6px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.backToTop {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dot {
@@ -142,9 +186,15 @@ header p {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(56, 176, 138, 0.5); }
-  70% { box-shadow: 0 0 0 7px rgba(56, 176, 138, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(56, 176, 138, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 176, 138, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(56, 176, 138, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 176, 138, 0);
+  }
 }
 
 main {
@@ -216,7 +266,9 @@ nav button {
   font-weight: 500;
   position: relative;
   box-shadow: none;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 nav button:hover {
@@ -282,7 +334,9 @@ select {
   font-family: var(--font-ui);
   font-size: 13.5px;
   color: var(--ink);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 input::placeholder {
@@ -322,7 +376,11 @@ button {
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  transition: background 0.15s ease, transform 0.06s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.06s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
   box-shadow: var(--shadow-sm);
 }
 
@@ -608,8 +666,12 @@ tr.editingRow td.actionCol {
 }
 
 @keyframes overlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal {
@@ -625,8 +687,14 @@ tr.editingRow td.actionCol {
 }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: translateY(14px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modalHeader {
