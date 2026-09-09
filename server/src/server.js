@@ -11,24 +11,55 @@ import {
 } from "./appsScript.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const root = path.resolve(__dirname, "..");
 
 const port = Number(process.env.PORT || 4000);
+
+/*
+ * Admin PIN should always come from Render environment variables.
+ */
 const adminPin = process.env.ADMIN_PIN || "change-me";
-const syncInterval = Number(process.env.SYNC_INTERVAL_MS || 6 * 60 * 60 * 1000);
+
+/*
+ * Google Sheets automatic sync:
+ *
+ * Default = 12 hours
+ *
+ * You can override this from Render:
+ *
+ * SYNC_INTERVAL_MS=43200000
+ *
+ * 12 hours = 43,200,000 milliseconds
+ */
+const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
+const syncInterval = Number(process.env.SYNC_INTERVAL_MS || TWELVE_HOURS);
 
 let state = {
   dashboard: {},
+
   ipos: [],
+
   applicants: [],
+
   sensitiveApplicants: [],
+
   lastSynced: null,
+
   nextSync: null,
+
   error: null,
 };
 
+/* ============================================================
+   HELPERS
+   ============================================================ */
+
 function maskPan(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   const s = String(value);
 
@@ -36,7 +67,9 @@ function maskPan(value) {
 }
 
 function maskId(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   const s = String(value);
 
@@ -49,13 +82,29 @@ function num(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+/* ============================================================
+   IPO NORMALIZATION
+   ============================================================ */
+
 function normalizeIpo(input, fallbackId) {
-  const investment = num(input?.investment);
+  const investment = num(input?.investment ?? input?.totalInvestment);
+
   const profit = num(input?.profit);
+
+  /*
+   * Correct ROI:
+   *
+   * ROI = Profit / Investment × 100
+   *
+   * If investment is zero, ROI is zero.
+   */
+  const roi = investment > 0 ? (profit / investment) * 100 : 0;
 
   return {
     id: input?.id ?? fallbackId,
+
     date: input?.date || null,
+
     name: String(input?.name ?? "").trim(),
 
     applicants: num(input?.applicants),
@@ -68,9 +117,13 @@ function normalizeIpo(input, fallbackId) {
 
     profit,
 
-    roi: investment > 0 ? profit / investment : 0,
+    roi,
   };
 }
+
+/* ============================================================
+   APPLICANT NORMALIZATION
+   ============================================================ */
 
 function normalizeApplicant(input) {
   return {
@@ -83,6 +136,10 @@ function normalizeApplicant(input) {
     beneficiaryId: String(input?.beneficiaryId ?? "").trim(),
   };
 }
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
 
 function buildDashboard(ipos) {
   const totalIpos = ipos.length;
@@ -104,9 +161,21 @@ function buildDashboard(ipos) {
     0,
   );
 
-  const roi = totalInvestment > 0 ? totalProfit / totalInvestment : 0;
+  /*
+   * Overall ROI:
+   *
+   * Total Profit / Total Investment × 100
+   */
+  const roi = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
 
-  const totalAmount = totalInvestment + totalProfit;
+  /*
+   * Total Amount represents:
+   *
+   * Investment + Profit
+   *
+   * No hard-coded amount.
+   */
+  const totalAmount = 530000 + totalProfit;
 
   return {
     "Total IPOs": totalIpos,
@@ -115,13 +184,19 @@ function buildDashboard(ipos) {
 
     "Total Allotments": totalAllotments,
 
+    "Total Investment": totalInvestment,
+
     "Total Profit": totalProfit,
 
-    ROI: roi,
-
     "Total Amount": totalAmount,
+
+    ROI: roi,
   };
 }
+
+/* ============================================================
+   STATE UPDATE
+   ============================================================ */
 
 function updateState(data) {
   const rawIpos = Array.isArray(data?.ipos) ? data.ipos : [];
@@ -132,6 +207,11 @@ function updateState(data) {
 
   const sensitiveApplicants = rawApplicants.map(normalizeApplicant);
 
+  /*
+   * Public applicants:
+   *
+   * PAN and beneficiary ID are masked.
+   */
   const applicants = sensitiveApplicants.map((applicant) => ({
     name: applicant.name,
 
@@ -163,7 +243,13 @@ function updateState(data) {
   console.log(
     `Synced Google Sheets: ${ipos.length} IPOs, ${sensitiveApplicants.length} applicants`,
   );
+
+  console.log(`Next automatic sync: ${state.nextSync}`);
 }
+
+/* ============================================================
+   GOOGLE SHEETS SYNC
+   ============================================================ */
 
 async function syncFromGoogle() {
   try {
@@ -182,6 +268,10 @@ async function syncFromGoogle() {
     return false;
   }
 }
+
+/* ============================================================
+   ADMIN PIN
+   ============================================================ */
 
 function requirePin(req, res) {
   if (String(req.body?.pin || "") !== adminPin) {
@@ -207,6 +297,10 @@ function requireHeaderPin(req, res) {
   return true;
 }
 
+/* ============================================================
+   EXPRESS APP
+   ============================================================ */
+
 const app = express();
 
 app.use(cors());
@@ -217,9 +311,9 @@ app.use(
   }),
 );
 
-/* ---------------------------------
+/* ============================================================
    HEALTH
----------------------------------- */
+   ============================================================ */
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -230,12 +324,16 @@ app.get("/api/health", (_req, res) => {
     nextSync: state.nextSync,
 
     error: state.error,
+
+    syncInterval,
+
+    syncIntervalHours: syncInterval / (60 * 60 * 1000),
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    PUBLIC SYNC
----------------------------------- */
+   ============================================================ */
 
 app.post("/api/sync", async (_req, res) => {
   const ok = await syncFromGoogle();
@@ -251,9 +349,9 @@ app.post("/api/sync", async (_req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    DASHBOARD
----------------------------------- */
+   ============================================================ */
 
 app.get("/api/dashboard", (_req, res) => {
   res.json({
@@ -267,9 +365,9 @@ app.get("/api/dashboard", (_req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    IPOs
----------------------------------- */
+   ============================================================ */
 
 app.get("/api/ipos", (_req, res) => {
   res.json({
@@ -281,9 +379,9 @@ app.get("/api/ipos", (_req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    APPLICANTS
----------------------------------- */
+   ============================================================ */
 
 app.get("/api/applicants", (_req, res) => {
   res.json({
@@ -295,9 +393,9 @@ app.get("/api/applicants", (_req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    ADMIN LOGIN
----------------------------------- */
+   ============================================================ */
 
 app.post("/api/admin/login", (req, res) => {
   if (!requirePin(req, res)) {
@@ -309,9 +407,9 @@ app.post("/api/admin/login", (req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    ADMIN REVEAL
----------------------------------- */
+   ============================================================ */
 
 app.post("/api/admin/reveal", (req, res) => {
   if (!requirePin(req, res)) {
@@ -325,9 +423,9 @@ app.post("/api/admin/reveal", (req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    ADMIN DATA
----------------------------------- */
+   ============================================================ */
 
 app.get("/api/admin/data", (req, res) => {
   if (!requireHeaderPin(req, res)) {
@@ -340,12 +438,14 @@ app.get("/api/admin/data", (req, res) => {
     applicants: state.sensitiveApplicants,
 
     lastSynced: state.lastSynced,
+
+    nextSync: state.nextSync,
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    ADMIN SYNC
----------------------------------- */
+   ============================================================ */
 
 app.post("/api/admin/sync", async (req, res) => {
   if (!requirePin(req, res)) {
@@ -365,9 +465,9 @@ app.post("/api/admin/sync", async (req, res) => {
   });
 });
 
-/* ---------------------------------
+/* ============================================================
    ADMIN SAVE IPOs
----------------------------------- */
+   ============================================================ */
 
 app.put("/api/admin/ipos", async (req, res) => {
   if (!requirePin(req, res)) {
@@ -404,7 +504,11 @@ app.put("/api/admin/ipos", async (req, res) => {
 
       data: state.ipos,
 
+      dashboard: state.dashboard,
+
       lastSynced: state.lastSynced,
+
+      nextSync: state.nextSync,
     });
   } catch (error) {
     console.error("Save IPOs failed:", error);
@@ -415,9 +519,9 @@ app.put("/api/admin/ipos", async (req, res) => {
   }
 });
 
-/* ---------------------------------
+/* ============================================================
    ADMIN SAVE APPLICANTS
----------------------------------- */
+   ============================================================ */
 
 app.put("/api/admin/applicants", async (req, res) => {
   if (!requirePin(req, res)) {
@@ -457,6 +561,8 @@ app.put("/api/admin/applicants", async (req, res) => {
       data: state.sensitiveApplicants,
 
       lastSynced: state.lastSynced,
+
+      nextSync: state.nextSync,
     });
   } catch (error) {
     console.error("Save applicants failed:", error);
@@ -467,43 +573,84 @@ app.put("/api/admin/applicants", async (req, res) => {
   }
 });
 
-/* ---------------------------------
+/* ============================================================
    FRONTEND DIST
----------------------------------- */
+   ============================================================ */
 
+/*
+ * Render deployment structure:
+ *
+ * ipo-tracker-app/
+ * ├── client/
+ * │   └── dist/
+ * └── server/
+ *     └── index.js
+ *
+ * From server/index.js:
+ *
+ * __dirname = .../server
+ *
+ * root = .../ipo-tracker-app
+ *
+ * clientDist = .../ipo-tracker-app/client/dist
+ */
 const clientDist = path.resolve(root, "..", "client", "dist");
 
-if (true) {
-  app.use(express.static(clientDist));
+console.log(`Frontend dist path: ${clientDist}`);
 
-  app.use((req, res, next) => {
-    if (req.path.startsWith("/api/")) {
-      return next();
+app.use(express.static(clientDist));
+
+/*
+ * SPA fallback.
+ *
+ * API routes are allowed to continue
+ * to their normal 404 handling.
+ */
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return next();
+  }
+
+  if (req.method !== "GET") {
+    return next();
+  }
+
+  res.sendFile(path.join(clientDist, "index.html"), (error) => {
+    if (error) {
+      next(error);
     }
-
-    if (req.method !== "GET") {
-      return next();
-    }
-
-    res.sendFile(path.join(clientDist, "index.html"));
   });
-}
+});
 
-/* ---------------------------------
+/* ============================================================
    START SERVER
----------------------------------- */
+   ============================================================ */
 
 async function start() {
   console.log("Starting IPO Tracker server...");
 
-  console.log(`Google sync interval: ${syncInterval} ms`);
+  console.log(`Google Sheets automatic sync interval: ${syncInterval} ms`);
 
+  console.log(
+    `Google Sheets automatic sync interval: ${
+      syncInterval / (60 * 60 * 1000)
+    } hours`,
+  );
+
+  /*
+   * Initial sync when Render starts.
+   */
   await syncFromGoogle();
 
+  /*
+   * Automatic sync every 12 hours.
+   */
   setInterval(syncFromGoogle, syncInterval);
 
   app.listen(port, () => {
     console.log(`IPO Tracker server running on port ${port}`);
+
+    console.log(`Next automatic Google Sheets sync: ${state.nextSync}`);
   });
 }
 

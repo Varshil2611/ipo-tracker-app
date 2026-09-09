@@ -1,32 +1,34 @@
 /* ============================================================
-   IPO Tracker — design tokens
-   A ledger-inspired fintech palette: deep navy chrome, warm
-   paper surfaces, and one signal color (emerald) reserved for
-   money that's working in your favor. Numbers set in a mono
-   face so figures line up the way they would in a statement.
+   IPO Tracker
+   Clean fintech / ledger-inspired design
    ============================================================ */
+
 :root {
   --bg: #f4f5f9;
   --surface: #ffffff;
   --surface-alt: #eef0f6;
   --surface-sunken: #e8eaf1;
+
   --border: #dfe2ec;
   --border-strong: #c7cbdb;
 
   --ink: #171c30;
   --ink-soft: #5b6376;
   --ink-faint: #8890a3;
+
   --on-brand: #f3f5fb;
 
   --brand: #1c2b4a;
   --brand-strong: #101a30;
   --brand-tint: #2f4570;
+
   --accent: #2f5ca8;
   --accent-soft: #e7edf9;
 
   --positive: #146c49;
   --positive-strong: #0f5138;
   --positive-bg: #e2f3ea;
+
   --negative: #a83a2b;
   --negative-strong: #832c20;
   --negative-bg: #fbe9e6;
@@ -38,14 +40,18 @@
 
   --shadow-sm:
     0 1px 2px rgba(23, 28, 48, 0.06), 0 1px 1px rgba(23, 28, 48, 0.04);
+
   --shadow-md:
     0 8px 24px rgba(23, 28, 48, 0.1), 0 2px 6px rgba(23, 28, 48, 0.06);
+
   --shadow-lg:
     0 24px 60px rgba(12, 16, 32, 0.28), 0 8px 20px rgba(12, 16, 32, 0.16);
 
   --font-display: "Fraunces", "Iowan Old Style", ui-serif, Georgia, serif;
+
   --font-ui:
     "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   font-family: var(--font-ui);
@@ -59,18 +65,33 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
+  background: var(--bg);
+}
+
+button,
+input,
+select {
+  font: inherit;
 }
 
 ::selection {
   background: #cddbf3;
 }
 
-/* Accessible focus ring everywhere, invisible until keyboard use */
+/* ============================================================
+   ACCESSIBILITY
+   ============================================================ */
+
 :focus {
   outline: none;
 }
+
 :focus-visible {
   outline: 2.5px solid var(--accent);
   outline-offset: 2px;
@@ -89,8 +110,9 @@ body {
 }
 
 /* ============================================================
-   Layout shell
+   LAYOUT
    ============================================================ */
+
 .app {
   min-height: 100vh;
   display: flex;
@@ -99,67 +121,174 @@ body {
 
 header {
   background: linear-gradient(155deg, var(--brand-strong), var(--brand) 70%);
+
   color: var(--on-brand);
+
   padding: 26px 5%;
+
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
+
+  gap: 24px;
+
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+
+.brandBlock {
+  min-width: 0;
 }
 
 h1 {
   margin: 0;
+
   font-family: var(--font-display);
+
   font-weight: 600;
+
   font-size: 27px;
+
   letter-spacing: 0.01em;
 }
 
 header p {
   margin: 5px 0 0;
+
   color: #aab4cc;
+
   font-size: 13px;
 }
+
+main {
+  max-width: 1360px;
+
+  margin: 0 auto;
+
+  padding: 30px 5% 10px;
+
+  width: 100%;
+
+  flex: 1;
+}
+
+footer {
+  color: var(--ink-faint);
+
+  font-size: 12px;
+
+  text-align: center;
+
+  padding: 28px 20px 34px;
+}
+
+/* ============================================================
+   SYNC
+   ============================================================ */
 
 .sync {
   font-size: 13px;
+
   color: #cfd6e8;
-  text-align: right;
-  white-space: nowrap;
+
   display: flex;
+
   align-items: center;
-  gap: 10px;
+
+  justify-content: flex-end;
+
+  gap: 14px;
+
+  min-width: 0;
+}
+
+.syncInfo {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  flex-wrap: wrap;
+
+  justify-content: flex-end;
 }
 
 .sync small {
-  display: block;
-  margin-top: 2px;
   color: #8b96b3;
+
   font-size: 12px;
 }
 
 .syncNowBtn {
-  padding: 6px 14px;
+  padding: 7px 14px;
+
   font-size: 12px;
+
   white-space: nowrap;
 }
 
+.dot {
+  display: inline-block;
+
+  flex: 0 0 auto;
+
+  width: 8px;
+
+  height: 8px;
+
+  border-radius: 50%;
+
+  background: #38b08a;
+
+  box-shadow: 0 0 0 0 rgba(56, 176, 138, 0.55);
+
+  animation: pulse 2.4s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 176, 138, 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 7px rgba(56, 176, 138, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 176, 138, 0);
+  }
+}
+
+/* ============================================================
+   BACK TO TOP
+   ============================================================ */
+
 .backToTop {
   position: fixed;
+
   right: 22px;
   bottom: 22px;
+
   width: 42px;
   height: 42px;
+
   padding: 0;
+
   border-radius: 50%;
+
   font-size: 18px;
+
   line-height: 1;
+
   display: flex;
+
   align-items: center;
   justify-content: center;
+
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+
   z-index: 40;
+
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -168,104 +297,102 @@ header p {
     opacity: 0;
     transform: translateY(6px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-.dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #38b08a;
-  margin-right: 7px;
-  box-shadow: 0 0 0 0 rgba(56, 176, 138, 0.55);
-  animation: pulse 2.4s ease-out infinite;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(56, 176, 138, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 7px rgba(56, 176, 138, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(56, 176, 138, 0);
-  }
-}
-
-main {
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: 30px 5% 10px;
-  width: 100%;
-  flex: 1;
-}
-
-footer {
-  color: var(--ink-faint);
-  font-size: 12px;
-  text-align: center;
-  padding: 28px 20px 34px;
-}
-
 /* ============================================================
-   Summary cards
+   DASHBOARD CARDS
    ============================================================ */
+
 .cards {
   display: grid;
+
   grid-template-columns: repeat(5, 1fr);
+
   gap: 14px;
 }
 
 .card {
   background: var(--surface);
+
   border: 1px solid var(--border);
+
   border-radius: var(--radius-md);
+
   padding: 18px 18px 16px;
+
   box-shadow: var(--shadow-sm);
+
+  min-width: 0;
 }
 
 .card span {
   display: block;
+
   color: var(--ink-soft);
+
   font-size: 13px;
+
   margin-bottom: 10px;
 }
 
 .card strong {
+  display: block;
+
   font-family: var(--font-mono);
+
   font-weight: 600;
+
   font-size: 21px;
+
   font-variant-numeric: tabular-nums;
+
   letter-spacing: -0.01em;
+
+  overflow-wrap: anywhere;
 }
 
 /* ============================================================
-   Nav
+   NAV
    ============================================================ */
+
 nav {
   display: flex;
+
   gap: 4px;
+
   margin: 26px 0 14px;
+
   border-bottom: 1px solid var(--border);
 }
 
 nav button {
   border: 0;
+
   background: transparent;
+
   padding: 10px 16px 12px;
+
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+
   color: var(--ink-soft);
+
   cursor: pointer;
+
   font-family: var(--font-ui);
+
   font-size: 14px;
+
   font-weight: 500;
+
   position: relative;
+
   box-shadow: none;
+
   transition:
     color 0.15s ease,
     background 0.15s ease;
@@ -273,22 +400,30 @@ nav button {
 
 nav button:hover {
   color: var(--ink);
+
   background: var(--surface-alt);
 }
 
 nav button.active {
   color: var(--brand);
+
   font-weight: 600;
 }
 
 nav button.active::after {
   content: "";
+
   position: absolute;
+
   left: 10px;
   right: 10px;
+
   bottom: -1px;
+
   height: 2.5px;
+
   background: var(--accent);
+
   border-radius: 2px 2px 0 0;
 }
 
@@ -297,15 +432,20 @@ nav button.active::after {
 }
 
 /* ============================================================
-   Panels / surfaces
+   PANELS
    ============================================================ */
+
 .panel,
 .adminLogin,
 .adminPanel {
   background: var(--surface);
+
   border: 1px solid var(--border);
+
   border-radius: var(--radius-lg);
+
   padding: 20px 20px 8px;
+
   box-shadow: var(--shadow-sm);
 }
 
@@ -313,27 +453,56 @@ nav button.active::after {
   padding: 28px;
 }
 
+/* ============================================================
+   TOOLBAR
+   ============================================================ */
+
 .toolbar {
   display: flex;
+
   gap: 10px;
+
   margin-bottom: 10px;
+
   align-items: center;
+
   flex-wrap: wrap;
 }
 
+.filters {
+  margin-bottom: 6px;
+}
+
+.filterMain {
+  margin-bottom: 12px;
+}
+
+.filterDates {
+  margin-bottom: 6px;
+}
+
 /* ============================================================
-   Form controls
+   FORMS
    ============================================================ */
+
 input,
 select {
   border: 1px solid var(--border-strong);
+
   border-radius: var(--radius-sm);
+
   padding: 10px 12px;
+
   background: var(--surface);
+
   outline: none;
+
   font-family: var(--font-ui);
+
   font-size: 13.5px;
+
   color: var(--ink);
+
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -351,6 +520,7 @@ select:hover {
 input:focus,
 select:focus {
   border-color: var(--accent);
+
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -362,25 +532,53 @@ select {
   cursor: pointer;
 }
 
+.filters label {
+  font-size: 12.5px;
+
+  color: var(--ink-soft);
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+}
+
+.filters label input {
+  min-width: 145px;
+}
+
 /* ============================================================
-   Buttons
+   BUTTONS
    ============================================================ */
+
 button {
   border: 0;
+
   border-radius: var(--radius-sm);
+
   padding: 10px 16px;
+
   background: var(--brand);
+
   color: #fff;
+
   cursor: pointer;
+
   font-family: var(--font-ui);
+
   font-size: 13.5px;
+
   font-weight: 600;
+
   letter-spacing: 0.01em;
+
   transition:
     background 0.15s ease,
     transform 0.06s ease,
     box-shadow 0.15s ease,
     opacity 0.15s ease;
+
   box-shadow: var(--shadow-sm);
 }
 
@@ -394,93 +592,114 @@ button:active {
 
 button:disabled {
   opacity: 0.55;
+
   cursor: not-allowed;
+
   transform: none;
+
   box-shadow: none;
 }
+
 button:disabled:hover {
   background: var(--brand);
 }
 
 .lightBtn {
   background: var(--surface-alt);
+
   color: var(--ink);
+
   box-shadow: none;
+
   border: 1px solid var(--border);
 }
+
 .lightBtn:hover {
   background: var(--surface-sunken);
 }
+
 .lightBtn:disabled:hover {
   background: var(--surface-alt);
 }
 
 .dangerBtn {
   background: var(--negative-bg);
+
   color: var(--negative-strong);
+
   box-shadow: none;
+
   padding: 7px 12px;
+
   font-size: 13px;
 }
+
 .dangerBtn:hover {
   background: #f5d3cd;
 }
 
+.clearBtn {
+  min-width: 80px;
+}
+
 /* ============================================================
-   Filters
+   RESULT COUNT
    ============================================================ */
-.filters {
-  margin-bottom: 6px;
-}
-
-.filters label {
-  font-size: 12.5px;
-  color: var(--ink-soft);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.filters label input {
-  min-width: 145px;
-}
 
 .resultCount {
   font-size: 12.5px;
+
   color: var(--ink-faint);
+
   margin: 8px 2px 14px;
 }
 
 /* ============================================================
-   Tables
+   TABLES
    ============================================================ */
+
 .tableWrap {
   overflow: auto;
+
   border-radius: var(--radius-md);
+
   border: 1px solid var(--border);
+
+  max-width: 100%;
 }
 
 table {
   width: 100%;
+
   border-collapse: collapse;
+
   font-size: 13.5px;
+
   background: var(--surface);
 }
 
 th {
   text-align: left;
+
   color: var(--ink-soft);
+
   font-weight: 600;
+
   background: var(--surface-alt);
+
   position: sticky;
+
   top: 0;
+
   z-index: 1;
 }
 
 th,
 td {
   padding: 12px 14px;
+
   border-bottom: 1px solid var(--border);
+
   white-space: nowrap;
 }
 
@@ -498,50 +717,85 @@ tbody tr:hover {
 
 .num {
   font-family: var(--font-mono);
+
   font-variant-numeric: tabular-nums;
+
   text-align: right;
+}
+
+.breakText {
+  white-space: normal;
+
+  overflow-wrap: anywhere;
+
+  max-width: 260px;
+}
+
+.sensitiveValue {
+  font-family: var(--font-mono);
+
+  letter-spacing: 0.02em;
 }
 
 .badge {
   display: inline-block;
+
   min-width: 26px;
+
   text-align: center;
+
   padding: 4px 9px;
+
   border-radius: var(--radius-pill);
+
   background: var(--surface-sunken);
+
   color: var(--ink-soft);
+
   font-family: var(--font-mono);
+
   font-size: 12.5px;
+
   font-weight: 600;
 }
 
 .badge.good {
   background: var(--positive-bg);
+
   color: var(--positive-strong);
 }
 
 /* ============================================================
-   Admin
+   ADMIN
    ============================================================ */
+
 .adminLogin h2,
 .adminHeader h2 {
   margin: 0 0 6px;
+
   font-family: var(--font-display);
+
   font-size: 21px;
+
   font-weight: 600;
 }
 
 .adminLogin p,
 .adminHeader p {
   margin: 0 0 14px;
+
   color: var(--ink-soft);
+
   font-size: 13.5px;
+
   line-height: 1.55;
 }
 
 .adminControls {
   display: flex;
+
   gap: 8px;
+
   flex-wrap: wrap;
 }
 
@@ -552,42 +806,59 @@ tbody tr:hover {
 .adminHeader,
 .sectionTitle {
   display: flex;
+
   justify-content: space-between;
+
   gap: 15px;
+
   align-items: center;
+
   flex-wrap: wrap;
 }
 
 .adminHeader {
   padding-bottom: 16px;
+
   border-bottom: 1px solid var(--border);
+
   margin-bottom: 4px;
 }
 
 .adminSection {
   border-top: 1px solid var(--border);
+
   margin-top: 18px;
+
   padding-top: 18px;
 }
 
 .sectionTitle h3 {
   margin: 0;
+
   font-family: var(--font-display);
+
   font-size: 17px;
+
   font-weight: 600;
 }
 
-.sectionTitle div,
+.sectionTitle > div,
 .sectionTitleActions {
   display: flex;
+
   gap: 8px;
+
+  flex-wrap: wrap;
 }
 
 .editTable input,
 .editTable select {
   min-width: 110px;
+
   width: 100%;
+
   padding: 8px 10px;
+
   font-size: 13px;
 }
 
@@ -605,22 +876,23 @@ tbody tr:hover {
 .editTable td:nth-child(6) input,
 .editTable td:nth-child(7) input {
   min-width: 120px;
+
   text-align: right;
+
   font-family: var(--font-mono);
 }
 
-/* Row being edited gets a visible tint so it's obvious which one is unlocked */
-tr.editingRow td {
-  background: var(--accent-soft);
-}
-
-/* Action column stays reachable without horizontal scrolling on wide tables */
 .actionCol {
   position: sticky;
+
   right: 0;
+
   z-index: 2;
+
   background: var(--surface-alt);
+
   box-shadow: -8px 0 8px -8px rgba(15, 20, 40, 0.18);
+
   white-space: nowrap;
 }
 
@@ -632,36 +904,47 @@ tbody tr:hover td.actionCol {
   background: #eef3fb;
 }
 
-tr.editingRow td.actionCol {
-  background: var(--accent-soft);
-}
-
 .actionsCell {
   display: flex;
+
   gap: 8px;
+
   justify-content: flex-end;
 }
 
 .actionsCell button {
   padding: 7px 12px;
+
   font-size: 12.5px;
+
   white-space: nowrap;
 }
 
 /* ============================================================
-   Modals — the previously-unstyled "popups"
+   MODALS
    ============================================================ */
+
 .modalOverlay {
   position: fixed;
+
   inset: 0;
+
   background: rgba(10, 14, 27, 0.6);
+
   backdrop-filter: blur(3px);
+
   -webkit-backdrop-filter: blur(3px);
+
   display: flex;
+
   align-items: center;
+
   justify-content: center;
+
   padding: 24px;
+
   z-index: 100;
+
   animation: overlayIn 0.16s ease-out;
 }
 
@@ -669,6 +952,7 @@ tr.editingRow td.actionCol {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -676,133 +960,264 @@ tr.editingRow td.actionCol {
 
 .modal {
   background: var(--surface);
+
   border-radius: var(--radius-lg);
+
   width: min(560px, 100%);
+
   max-height: min(640px, 88vh);
+
   display: flex;
+
   flex-direction: column;
+
   box-shadow: var(--shadow-lg);
+
   overflow: hidden;
+
   animation: modalIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes modalIn {
   from {
     opacity: 0;
+
     transform: translateY(14px) scale(0.97);
   }
+
   to {
     opacity: 1;
+
     transform: translateY(0) scale(1);
   }
 }
 
 .modalHeader {
   display: flex;
+
   justify-content: space-between;
+
   align-items: flex-start;
+
   gap: 16px;
+
   padding: 22px 24px 18px;
+
   border-bottom: 1px solid var(--border);
 }
 
 .modalHeader h2 {
   margin: 0;
+
   font-family: var(--font-display);
+
   font-size: 20px;
+
   font-weight: 600;
+
   color: var(--ink);
 }
 
 .modalHeader p {
   margin: 5px 0 0;
+
   font-size: 13px;
+
   color: var(--ink-soft);
 }
 
 .modalClose {
   flex: none;
+
   width: 32px;
   height: 32px;
+
   padding: 0;
+
   border-radius: 50%;
+
   background: transparent;
+
   color: var(--ink-soft);
+
   font-size: 20px;
+
   line-height: 1;
+
   display: flex;
+
   align-items: center;
+
   justify-content: center;
+
   box-shadow: none;
 }
 
 .modalClose:hover {
   background: var(--surface-alt);
+
   color: var(--ink);
 }
 
 .modalForm {
   padding: 20px 24px;
+
   overflow-y: auto;
+
   display: grid;
-  grid-template-columns: 1fr 1fr;
+
+  grid-template-columns:
+    1fr
+    1fr;
+
   gap: 16px 14px;
 }
 
 .modalForm label {
   display: flex;
+
   flex-direction: column;
+
   gap: 6px;
+
   font-size: 12.5px;
+
   color: var(--ink-soft);
+
   font-weight: 500;
+
+  min-width: 0;
 }
 
 .modalForm label input,
 .modalForm label select {
   min-width: 0;
+
   width: 100%;
 }
 
 .modalActions {
   display: flex;
+
   justify-content: flex-end;
+
   gap: 10px;
+
   padding: 16px 24px;
+
   border-top: 1px solid var(--border);
+
   background: var(--surface-alt);
 }
 
 /* ============================================================
-   Responsive
+   LARGE TABLE RESPONSIVENESS
    ============================================================ */
-@media (max-width: 900px) {
+
+@media (max-width: 1100px) {
   .cards {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   header {
     align-items: flex-start;
-    gap: 12px;
+
     flex-direction: column;
   }
 
   .sync {
-    text-align: left;
+    width: 100%;
+
+    justify-content: space-between;
+  }
+
+  .syncInfo {
+    justify-content: flex-start;
+  }
+}
+
+/* ============================================================
+   TABLET
+   ============================================================ */
+
+@media (max-width: 900px) {
+  main {
+    padding: 24px 4% 10px;
+  }
+
+  .cards {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .modalForm {
     grid-template-columns: 1fr;
   }
+
+  .sectionTitle {
+    align-items: flex-start;
+  }
 }
 
-/* Below this width, tables stop scrolling sideways and become a stack of
-   cards instead — every field is labeled and the action buttons sit at the
-   bottom of each card, always in reach with no horizontal scroll. */
+/* ============================================================
+   MOBILE TABLE CARDS
+   ============================================================ */
+
 @media (max-width: 720px) {
+  header {
+    padding: 20px 4%;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  header p {
+    font-size: 12px;
+  }
+
+  .sync {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    gap: 10px;
+  }
+
+  .syncInfo {
+    justify-content: flex-start;
+  }
+
+  .syncNowBtn {
+    width: 100%;
+  }
+
+  nav {
+    margin-top: 20px;
+  }
+
+  nav button {
+    padding: 10px 11px 12px;
+
+    font-size: 13px;
+  }
+
+  .adminBtn {
+    margin-left: auto !important;
+  }
+
+  .panel,
+  .adminLogin,
+  .adminPanel {
+    padding: 16px 14px 8px;
+
+    border-radius: var(--radius-md);
+  }
+
   .tableWrap {
     overflow: visible;
+
     border: 0;
+
     border-radius: 0;
   }
 
@@ -810,6 +1225,7 @@ tr.editingRow td.actionCol {
   .tableWrap tbody,
   .tableWrap tr {
     display: block;
+
     width: 100%;
   }
 
@@ -819,26 +1235,38 @@ tr.editingRow td.actionCol {
 
   .tableWrap tbody tr {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
-    padding: 6px 14px;
-    margin-bottom: 12px;
-  }
 
-  .tableWrap tbody tr.editingRow {
-    border-color: var(--accent);
+    border: 1px solid var(--border);
+
+    border-radius: var(--radius-md);
+
+    box-shadow: var(--shadow-sm);
+
+    padding: 6px 14px;
+
+    margin-bottom: 12px;
+
+    overflow: hidden;
   }
 
   .tableWrap td {
     display: flex;
-    align-items: center;
+
+    align-items: flex-start;
+
     justify-content: space-between;
-    gap: 14px;
+
+    gap: 16px;
+
     text-align: right;
+
     white-space: normal;
+
     border-bottom: 1px solid var(--border);
+
     padding: 10px 0;
+
+    min-width: 0;
   }
 
   .tableWrap tr td:last-child {
@@ -847,83 +1275,272 @@ tr.editingRow td.actionCol {
 
   .tableWrap td::before {
     content: attr(data-label);
+
     color: var(--ink-soft);
+
     font-weight: 500;
+
     font-family: var(--font-ui);
+
     text-align: left;
-    flex: none;
+
+    flex: 0 0 auto;
+
+    max-width: 45%;
+  }
+
+  .tableWrap td > * {
+    max-width: 55%;
   }
 
   .tableWrap td[colspan] {
     justify-content: center;
+
     text-align: center;
   }
+
   .tableWrap td[colspan]::before {
     content: none;
   }
 
-  /* A sticky column makes no sense once rows are stacked cards */
+  .breakText,
+  .sensitiveValue,
+  .num {
+    overflow-wrap: anywhere;
+
+    word-break: break-word;
+  }
+
+  .num {
+    text-align: right;
+  }
+
   .actionCol,
   td.actionCol {
     position: static;
+
     box-shadow: none;
+
     background: transparent !important;
   }
 
   .actionsCell {
     justify-content: flex-end;
+
     flex: 1;
+
+    flex-wrap: wrap;
+  }
+
+  .actionsCell button {
+    flex: 0 1 auto;
   }
 
   .editTable input,
   .editTable select {
-    width: auto;
+    width: 100%;
+
     min-width: 0;
+
     text-align: right;
+  }
+
+  .sectionTitle {
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+  .sectionTitle > div {
+    width: 100%;
+
+    display: flex;
+
+    flex-wrap: wrap;
+  }
+
+  .sectionTitle > div button {
+    flex: 1 1 160px;
+  }
+
+  .sectionTitleActions {
+    width: 100%;
+  }
+
+  .sectionTitleActions button {
+    flex: 1 1 140px;
+  }
+
+  .adminControls {
+    flex-direction: column;
+  }
+
+  .adminControls input,
+  .adminControls button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .modalOverlay {
+    padding: 12px;
+  }
+
+  .modal {
+    max-height: 94vh;
+
+    border-radius: var(--radius-md);
+  }
+
+  .modalForm {
+    grid-template-columns: 1fr;
+
+    gap: 14px;
   }
 }
 
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
+
 @media (max-width: 520px) {
+  main {
+    padding: 18px 3.5% 8px;
+  }
+
   .cards {
     grid-template-columns: 1fr 1fr;
+
+    gap: 9px;
+  }
+
+  .card {
+    padding: 14px 12px;
+  }
+
+  .card span {
+    font-size: 11px;
+
+    margin-bottom: 7px;
   }
 
   .card strong {
-    font-size: 17px;
+    font-size: 15px;
   }
 
-  main {
-    padding: 20px 4% 8px;
+  nav {
+    gap: 2px;
+  }
+
+  nav button {
+    padding: 9px 8px 11px;
+
+    font-size: 12px;
+  }
+
+  nav button.active::after {
+    left: 6px;
+    right: 6px;
   }
 
   .toolbar {
     flex-direction: column;
+
     align-items: stretch;
+
+    width: 100%;
   }
 
   input,
   select {
     min-width: 0;
+
     width: 100%;
   }
 
-  .sectionTitle div {
+  .filters label {
+    flex-direction: column;
+
+    align-items: stretch;
+
+    gap: 5px;
+  }
+
+  .filters label input {
+    min-width: 0;
+  }
+
+  .clearBtn {
     width: 100%;
   }
 
-  .sectionTitle button {
-    flex: 1;
+  .resultCount {
+    margin: 8px 2px 12px;
   }
 
   .modal {
-    max-height: 92vh;
-    border-radius: var(--radius-md);
+    width: 100%;
+
+    max-height: 95vh;
   }
 
   .modalHeader,
   .modalForm,
   .modalActions {
-    padding-left: 18px;
-    padding-right: 18px;
+    padding-left: 16px;
+
+    padding-right: 16px;
+  }
+
+  .modalHeader {
+    padding-top: 18px;
+
+    padding-bottom: 15px;
+  }
+
+  .modalForm {
+    padding-top: 16px;
+
+    padding-bottom: 16px;
+  }
+
+  .modalActions {
+    flex-direction: column-reverse;
+  }
+
+  .modalActions button {
+    width: 100%;
+  }
+
+  .backToTop {
+    right: 14px;
+    bottom: 14px;
+
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ============================================================
+   VERY SMALL DEVICES
+   ============================================================ */
+
+@media (max-width: 380px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  nav button {
+    font-size: 11px;
+
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .tableWrap td::before {
+    max-width: 40%;
+  }
+
+  .tableWrap td > * {
+    max-width: 60%;
   }
 }

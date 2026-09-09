@@ -20,7 +20,17 @@ const dateFmt = (v) =>
       })
     : "—";
 
-const dateInput = (v) => (v ? new Date(v).toISOString().slice(0, 10) : "");
+const dateInput = (v) => {
+  if (!v) return "";
+
+  const date = new Date(v);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+};
 
 const blankIpo = () => ({
   id: Date.now(),
@@ -66,40 +76,62 @@ function App() {
 
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
+
   const [showBackToTop, setShowBackToTop] = useState(false);
 
   // ---------------------------------
-  // LOAD DATA FROM RENDER BACKEND
+  // LOAD DATA
   // ---------------------------------
 
   async function load() {
     try {
       const [dashboardResponse, ipoResponse, applicantResponse] =
         await Promise.all([
-          fetch(`${API_URL}/api/dashboard`).then((r) => r.json()),
-          fetch(`${API_URL}/api/ipos`).then((r) => r.json()),
-          fetch(`${API_URL}/api/applicants`).then((r) => r.json()),
+          fetch(`${API_URL}/api/dashboard`),
+          fetch(`${API_URL}/api/ipos`),
+          fetch(`${API_URL}/api/applicants`),
         ]);
 
-      setDash(dashboardResponse.dashboard || {});
-      setIpos(ipoResponse.data || []);
-      setApps(applicantResponse.data || []);
+      if (!dashboardResponse.ok || !ipoResponse.ok || !applicantResponse.ok) {
+        throw new Error("Could not load data from server.");
+      }
 
-      setLastSync(ipoResponse.lastSynced || null);
-      setNextSync(ipoResponse.nextSync || null);
+      const dashboardData = await dashboardResponse.json();
+      const ipoData = await ipoResponse.json();
+      const applicantData = await applicantResponse.json();
+
+      setDash(dashboardData.dashboard || {});
+      setIpos(ipoData.data || []);
+      setApps(applicantData.data || []);
+
+      setLastSync(
+        dashboardData.lastSynced ||
+          ipoData.lastSynced ||
+          applicantData.lastSynced ||
+          null,
+      );
+
+      setNextSync(
+        dashboardData.nextSync ||
+          ipoData.nextSync ||
+          applicantData.nextSync ||
+          null,
+      );
     } catch (error) {
       console.error("Could not load data:", error);
     }
   }
 
   // ---------------------------------
-  // INITIAL LOAD + 6 HOUR REFRESH
+  // INITIAL LOAD + 12 HOUR REFRESH
   // ---------------------------------
 
   useEffect(() => {
     load();
 
-    // Refresh frontend every 6 hours
+    // Refresh frontend every 12 hours.
+    // This only reloads the already-synced backend data.
+    // The backend itself also performs Google Sheets sync every 12 hours.
     const timer = setInterval(load, 12 * 60 * 60 * 1000);
 
     return () => clearInterval(timer);
@@ -110,13 +142,19 @@ function App() {
   // ---------------------------------
 
   useEffect(() => {
-    const onScroll = () => setShowBackToTop(window.scrollY > 400);
+    const onScroll = () => {
+      setShowBackToTop(window.scrollY > 400);
+    };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, {
+      passive: true,
+    });
 
     onScroll();
 
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   const scrollToTop = () => {
@@ -131,6 +169,8 @@ function App() {
   // ---------------------------------
 
   const publicSync = async () => {
+    if (syncing) return;
+
     setSyncing(true);
 
     try {
@@ -138,14 +178,16 @@ function App() {
         method: "POST",
       });
 
-      if (!response.ok) {
-        alert("Could not sync Google Sheets.");
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        alert(data.error || "Could not sync Google Sheets.");
         return;
       }
 
       await load();
     } catch (error) {
-      console.error(error);
+      console.error("Public sync failed:", error);
       alert("Could not sync Google Sheets.");
     } finally {
       setSyncing(false);
@@ -162,7 +204,7 @@ function App() {
 
       const ipoName = String(x.name || "").toLowerCase();
 
-      const searchText = search.toLowerCase();
+      const searchText = search.toLowerCase().trim();
 
       const matchesSearch = ipoName.includes(searchText);
 
@@ -175,29 +217,38 @@ function App() {
         (status === "allotted" && Number(x.allotments) > 0) ||
         (status === "pending" && Number(x.allotments) === 0);
 
-      const investmentValue = Number(x.investment ?? x.totalInvestment ?? 0);
-
       return matchesSearch && matchesDateFrom && matchesDateTo && matchesStatus;
     });
 
     list.sort((a, b) => {
       if (sort === "dateAsc") {
-        return new Date(a.date) - new Date(b.date);
+        return new Date(a.date || 0) - new Date(b.date || 0);
       }
 
       if (sort === "dateDesc") {
-        return new Date(b.date) - new Date(a.date);
+        return new Date(b.date || 0) - new Date(a.date || 0);
       }
 
       if (sort === "profit") {
         return Number(b.profit || 0) - Number(a.profit || 0);
       }
 
+      if (sort === "investment") {
+        return (
+          Number(b.investment || b.totalInvestment || 0) -
+          Number(a.investment || a.totalInvestment || 0)
+        );
+      }
+
       if (sort === "roi") {
         return Number(b.roi || 0) - Number(a.roi || 0);
       }
 
-      return Number(b.applicants || 0) - Number(a.applicants || 0);
+      if (sort === "applicants") {
+        return Number(b.applicants || 0) - Number(a.applicants || 0);
+      }
+
+      return 0;
     });
 
     return list;
@@ -216,6 +267,11 @@ function App() {
   // ---------------------------------
 
   const adminLogin = async () => {
+    if (!pin.trim()) {
+      alert("Please enter the Admin PIN.");
+      return;
+    }
+
     try {
       const response = await fetch(`${API_URL}/api/admin/login`, {
         method: "POST",
@@ -227,19 +283,23 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        alert("Invalid PIN");
+      const loginData = await response.json();
+
+      if (!response.ok || !loginData.ok) {
+        alert(loginData.error || "Invalid PIN");
         return;
       }
 
-      const data = await fetch(`${API_URL}/api/admin/data`, {
+      const dataResponse = await fetch(`${API_URL}/api/admin/data`, {
         headers: {
           "x-admin-pin": pin,
         },
-      }).then((response) => response.json());
+      });
 
-      if (data.error) {
-        alert("Invalid PIN");
+      const data = await dataResponse.json();
+
+      if (!dataResponse.ok || data.error) {
+        alert(data.error || "Could not load admin data.");
         return;
       }
 
@@ -248,7 +308,7 @@ function App() {
 
       setAdmin(true);
     } catch (error) {
-      console.error(error);
+      console.error("Admin login failed:", error);
       alert("Could not connect to the server.");
     }
   };
@@ -269,6 +329,8 @@ function App() {
   // ---------------------------------
 
   const sync = async () => {
+    if (syncing) return;
+
     setSyncing(true);
 
     try {
@@ -282,27 +344,31 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        alert("Invalid PIN");
-        setSyncing(false);
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        alert(data.error || "Could not sync Google Sheets.");
         return;
       }
 
       await load();
 
       if (admin) {
-        const data = await fetch(`${API_URL}/api/admin/data`, {
+        const adminResponse = await fetch(`${API_URL}/api/admin/data`, {
           headers: {
             "x-admin-pin": pin,
           },
-        }).then((response) => response.json());
+        });
 
-        setAdminIpos(data.ipos || []);
+        const adminData = await adminResponse.json();
 
-        setAdminApps(data.applicants || []);
+        if (adminResponse.ok) {
+          setAdminIpos(adminData.ipos || []);
+          setAdminApps(adminData.applicants || []);
+        }
       }
     } catch (error) {
-      console.error(error);
+      console.error("Admin sync failed:", error);
       alert("Could not sync Google Sheets.");
     } finally {
       setSyncing(false);
@@ -310,7 +376,7 @@ function App() {
   };
 
   // ---------------------------------
-  // SAVE IPOs TO GOOGLE SHEETS
+  // SAVE IPOs
   // ---------------------------------
 
   const saveIpos = async () => {
@@ -343,11 +409,21 @@ function App() {
       } else {
         await load();
 
+        const adminResponse = await fetch(`${API_URL}/api/admin/data`, {
+          headers: {
+            "x-admin-pin": pin,
+          },
+        });
+
+        if (adminResponse.ok) {
+          const adminData = await adminResponse.json();
+          setAdminIpos(adminData.ipos || []);
+        }
+
         alert("IPO changes saved to Google Sheets.");
       }
     } catch (error) {
-      console.error(error);
-
+      console.error("Save IPOs failed:", error);
       alert("Could not save IPO changes.");
     } finally {
       setSaving(false);
@@ -355,7 +431,7 @@ function App() {
   };
 
   // ---------------------------------
-  // SAVE APPLICANTS TO GOOGLE SHEETS
+  // SAVE APPLICANTS
   // ---------------------------------
 
   const saveApps = async () => {
@@ -388,11 +464,21 @@ function App() {
       } else {
         await load();
 
+        const adminResponse = await fetch(`${API_URL}/api/admin/data`, {
+          headers: {
+            "x-admin-pin": pin,
+          },
+        });
+
+        if (adminResponse.ok) {
+          const adminData = await adminResponse.json();
+          setAdminApps(adminData.applicants || []);
+        }
+
         alert("Applicant changes saved to Google Sheets.");
       }
     } catch (error) {
-      console.error(error);
-
+      console.error("Save applicants failed:", error);
       alert("Could not save applicant changes.");
     } finally {
       setSaving(false);
@@ -436,30 +522,36 @@ function App() {
   return (
     <div className="app">
       <header>
-        <div>
+        <div className="brandBlock">
           <h1>IPO Tracker</h1>
           <p>Track. Manage. Grow.</p>
         </div>
 
         <div className="sync">
-          <span className="dot" />
-          Last sync{" "}
-          {lastSync
-            ? new Date(lastSync).toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "—"}
-          <small>
-            {" "}
-            · Next check{" "}
-            {nextSync
-              ? new Date(nextSync).toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "—"}
-          </small>
+          <div className="syncInfo">
+            <span className="dot" />
+
+            <span>
+              Last sync{" "}
+              {lastSync
+                ? new Date(lastSync).toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—"}
+            </span>
+
+            <small>
+              · Next check{" "}
+              {nextSync
+                ? new Date(nextSync).toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—"}
+            </small>
+          </div>
+
           <button
             type="button"
             className="lightBtn syncNowBtn"
@@ -472,6 +564,10 @@ function App() {
       </header>
 
       <main>
+        {/* ---------------------------------
+            DASHBOARD CARDS
+        ---------------------------------- */}
+
         <section className="cards">
           <Card label="Total IPOs" value={dash["Total IPOs"]} />
 
@@ -486,6 +582,10 @@ function App() {
 
           <Card label="Profit" value={money(dash["Total Profit"])} />
         </section>
+
+        {/* ---------------------------------
+            NAVIGATION
+        ---------------------------------- */}
 
         <nav>
           <button
@@ -509,6 +609,10 @@ function App() {
             Admin
           </button>
         </nav>
+
+        {/* ---------------------------------
+            IPO SUMMARY
+        ---------------------------------- */}
 
         {tab === "ipos" && (
           <section className="panel">
@@ -554,7 +658,7 @@ function App() {
                       <tr key={x.id}>
                         <td data-label="Date">{dateFmt(x.date)}</td>
 
-                        <td className="strong" data-label="IPO">
+                        <td className="strong breakText" data-label="IPO">
                           {x.name}
                         </td>
 
@@ -581,7 +685,7 @@ function App() {
                         </td>
 
                         <td className="num" data-label="ROI">
-                          {x.roi == null ? "—" : Number(x.roi).toFixed(2) + "%"}
+                          {x.roi == null ? "—" : `${Number(x.roi).toFixed(2)}%`}
                         </td>
                       </tr>
                     ))
@@ -591,6 +695,10 @@ function App() {
             </div>
           </section>
         )}
+
+        {/* ---------------------------------
+            APPLICANTS
+        ---------------------------------- */}
 
         {tab === "applicants" && (
           <section className="panel">
@@ -626,15 +734,22 @@ function App() {
                     )
                     .map((x, index) => (
                       <tr key={index}>
-                        <td className="strong" data-label="Applicant">
+                        <td className="strong breakText" data-label="Applicant">
                           {x.name}
                         </td>
 
                         <td data-label="Depository">{x.depository}</td>
 
-                        <td data-label="PAN">{x.pan}</td>
+                        <td className="sensitiveValue" data-label="PAN">
+                          {x.pan}
+                        </td>
 
-                        <td data-label="Beneficiary ID">{x.beneficiaryId}</td>
+                        <td
+                          className="sensitiveValue"
+                          data-label="Beneficiary ID"
+                        >
+                          {x.beneficiaryId}
+                        </td>
                       </tr>
                     ))}
 
@@ -652,6 +767,10 @@ function App() {
             </div>
           </section>
         )}
+
+        {/* ---------------------------------
+            ADMIN LOGIN
+        ---------------------------------- */}
 
         {tab === "admin" && !admin && (
           <section className="adminLogin">
@@ -679,6 +798,10 @@ function App() {
             </div>
           </section>
         )}
+
+        {/* ---------------------------------
+            ADMIN PANEL
+        ---------------------------------- */}
 
         {tab === "admin" && admin && (
           <AdminPanel
@@ -715,6 +838,10 @@ function App() {
   );
 }
 
+// ============================================================
+// FILTER BAR
+// ============================================================
+
 function FilterBar({
   search,
   setSearch,
@@ -724,17 +851,13 @@ function FilterBar({
   setDateFrom,
   dateTo,
   setDateTo,
-  minInvestment,
-  setMinInvestment,
-  maxInvestment,
-  setMaxInvestment,
   sort,
   setSort,
   clearFilters,
 }) {
   return (
     <div className="filters">
-      <div className="toolbar">
+      <div className="toolbar filterMain">
         <input
           placeholder="Search IPO..."
           value={search}
@@ -743,9 +866,7 @@ function FilterBar({
 
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All status</option>
-
           <option value="allotted">Allotted</option>
-
           <option value="pending">No allotment</option>
         </select>
 
@@ -764,9 +885,9 @@ function FilterBar({
         </select>
       </div>
 
-      <div className="toolbar">
+      <div className="toolbar filterDates">
         <label>
-          From{" "}
+          From
           <input
             type="date"
             value={dateFrom}
@@ -775,7 +896,7 @@ function FilterBar({
         </label>
 
         <label>
-          To{" "}
+          To
           <input
             type="date"
             value={dateTo}
@@ -783,13 +904,17 @@ function FilterBar({
           />
         </label>
 
-        <button className="lightBtn" onClick={clearFilters}>
+        <button className="lightBtn clearBtn" onClick={clearFilters}>
           Clear
         </button>
       </div>
     </div>
   );
 }
+
+// ============================================================
+// ADMIN PANEL
+// ============================================================
 
 function AdminPanel({
   logout,
@@ -821,6 +946,10 @@ function AdminPanel({
 
   const [editApplicantDraft, setEditApplicantDraft] = useState(null);
 
+  // ---------------------------------
+  // EDIT IPO MODAL
+  // ---------------------------------
+
   const openEditIpoModal = (index) => {
     setEditIpoIndex(index);
     setEditIpoDraft({
@@ -833,6 +962,10 @@ function AdminPanel({
     setEditIpoDraft(null);
   };
 
+  // ---------------------------------
+  // EDIT APPLICANT MODAL
+  // ---------------------------------
+
   const openEditApplicantModal = (index) => {
     setEditApplicantIndex(index);
 
@@ -843,12 +976,11 @@ function AdminPanel({
 
   const closeEditApplicantModal = () => {
     setEditApplicantIndex(null);
-
     setEditApplicantDraft(null);
   };
 
   // ---------------------------------
-  // EDIT IPO
+  // SAVE EDIT IPO
   // ---------------------------------
 
   const saveEditIpo = () => {
@@ -862,13 +994,15 @@ function AdminPanel({
       return;
     }
 
-    const confirmed = window.confirm(
-      'Save changes to "' + editIpoDraft.name + '"?',
-    );
+    const confirmed = window.confirm(`Save changes to "${editIpoDraft.name}"?`);
 
     if (!confirmed) {
       return;
     }
+
+    const investment = Number(editIpoDraft.investment) || 0;
+
+    const profit = Number(editIpoDraft.profit) || 0;
 
     const updatedIpo = {
       ...editIpoDraft,
@@ -879,11 +1013,13 @@ function AdminPanel({
 
       retailAmount: Number(editIpoDraft.retailAmount) || 0,
 
-      investment: Number(editIpoDraft.investment) || 0,
+      investment,
 
       allotments: Number(editIpoDraft.allotments) || 0,
 
-      profit: Number(editIpoDraft.profit) || 0,
+      profit,
+
+      roi: investment > 0 ? (profit / investment) * 100 : 0,
     };
 
     setAdminIpos((current) =>
@@ -896,7 +1032,7 @@ function AdminPanel({
   };
 
   // ---------------------------------
-  // EDIT APPLICANT
+  // SAVE EDIT APPLICANT
   // ---------------------------------
 
   const saveEditApplicant = () => {
@@ -916,7 +1052,7 @@ function AdminPanel({
     }
 
     const confirmed = window.confirm(
-      'Save changes to "' + editApplicantDraft.name + '"?',
+      `Save changes to "${editApplicantDraft.name}"?`,
     );
 
     if (!confirmed) {
@@ -930,7 +1066,7 @@ function AdminPanel({
 
       depository: String(editApplicantDraft.depository).trim(),
 
-      pan: String(editApplicantDraft.pan).trim(),
+      pan: String(editApplicantDraft.pan).trim().toUpperCase(),
 
       beneficiaryId: String(editApplicantDraft.beneficiaryId).trim(),
     };
@@ -964,7 +1100,6 @@ function AdminPanel({
 
   const openApplicantModal = () => {
     setNewApplicant(blankApplicant());
-
     setShowApplicantModal(true);
   };
 
@@ -974,7 +1109,7 @@ function AdminPanel({
   };
 
   // ---------------------------------
-  // ESCAPE KEY FOR MODALS
+  // ESCAPE KEY
   // ---------------------------------
 
   useEffect(() => {
@@ -989,22 +1124,24 @@ function AdminPanel({
     }
 
     const onKeyDown = (e) => {
-      if (e.key === "Escape") {
-        if (showIpoModal) {
-          closeIpoModal();
-        }
+      if (e.key !== "Escape") {
+        return;
+      }
 
-        if (showApplicantModal) {
-          closeApplicantModal();
-        }
+      if (showIpoModal) {
+        closeIpoModal();
+      }
 
-        if (editIpoIndex !== null) {
-          closeEditIpoModal();
-        }
+      if (showApplicantModal) {
+        closeApplicantModal();
+      }
 
-        if (editApplicantIndex !== null) {
-          closeEditApplicantModal();
-        }
+      if (editIpoIndex !== null) {
+        closeEditIpoModal();
+      }
+
+      if (editApplicantIndex !== null) {
+        closeEditApplicantModal();
       }
     };
 
@@ -1027,6 +1164,10 @@ function AdminPanel({
       alert("Please select the IPO date.");
       return;
     }
+
+    const investment = Number(newIpo.investment) || 0;
+
+    const profit = Number(newIpo.profit) || 0;
 
     const confirmed = window.confirm(
       "Are you sure you want to add this IPO?\n\n" +
@@ -1067,11 +1208,13 @@ function AdminPanel({
 
       retailAmount: Number(newIpo.retailAmount) || 0,
 
-      investment: Number(newIpo.investment) || 0,
+      investment,
 
       allotments: Number(newIpo.allotments) || 0,
 
-      profit: Number(newIpo.profit) || 0,
+      profit,
+
+      roi: investment > 0 ? (profit / investment) * 100 : 0,
     };
 
     setAdminIpos((current) => [...current, ipoToAdd]);
@@ -1125,7 +1268,7 @@ function AdminPanel({
 
       depository: String(newApplicant.depository).trim(),
 
-      pan: String(newApplicant.pan).trim(),
+      pan: String(newApplicant.pan).trim().toUpperCase(),
 
       beneficiaryId: String(newApplicant.beneficiaryId).trim(),
     };
@@ -1136,24 +1279,12 @@ function AdminPanel({
   };
 
   // ---------------------------------
-  // SAVE
-  // ---------------------------------
-
-  const handleSaveIpos = async () => {
-    await saveIpos();
-  };
-
-  const handleSaveApps = async () => {
-    await saveApps();
-  };
-
-  // ---------------------------------
   // DELETE IPO
   // ---------------------------------
 
   const deleteIpo = (index, name) => {
     const confirmed = window.confirm(
-      'Are you sure you want to delete IPO "' + (name || "this IPO") + '"?',
+      `Are you sure you want to delete IPO "${name || "this IPO"}"?`,
     );
 
     if (!confirmed) {
@@ -1171,9 +1302,7 @@ function AdminPanel({
 
   const deleteApplicant = (index, name) => {
     const confirmed = window.confirm(
-      'Are you sure you want to delete applicant "' +
-        (name || "this applicant") +
-        '"?',
+      `Are you sure you want to delete applicant "${name || "this applicant"}"?`,
     );
 
     if (!confirmed) {
@@ -1187,6 +1316,10 @@ function AdminPanel({
 
   return (
     <section className="adminPanel">
+      {/* ---------------------------------
+          ADMIN HEADER
+      ---------------------------------- */}
+
       <div className="adminHeader">
         <div>
           <h2>Admin Panel</h2>
@@ -1218,7 +1351,7 @@ function AdminPanel({
               + Add IPO
             </button>
 
-            <button onClick={handleSaveIpos} disabled={saving}>
+            <button onClick={saveIpos} disabled={saving}>
               {saving ? "Saving..." : "Save IPO Changes"}
             </button>
           </div>
@@ -1244,7 +1377,7 @@ function AdminPanel({
                 <tr key={x.id || index}>
                   <td data-label="Date">{dateFmt(x.date)}</td>
 
-                  <td className="strong" data-label="IPO Name">
+                  <td className="strong breakText" data-label="IPO Name">
                     {x.name}
                   </td>
 
@@ -1313,7 +1446,7 @@ function AdminPanel({
               + Add Applicant
             </button>
 
-            <button onClick={handleSaveApps} disabled={saving}>
+            <button onClick={saveApps} disabled={saving}>
               {saving ? "Saving..." : "Save Applicant Changes"}
             </button>
           </div>
@@ -1324,13 +1457,9 @@ function AdminPanel({
             <thead>
               <tr>
                 <th>Applicant Name</th>
-
                 <th>Depository</th>
-
                 <th>PAN Card Number</th>
-
                 <th>Beneficiary Number/ID</th>
-
                 <th className="actionCol">Action</th>
               </tr>
             </thead>
@@ -1338,15 +1467,22 @@ function AdminPanel({
             <tbody>
               {adminApps.map((x, index) => (
                 <tr key={index}>
-                  <td className="strong" data-label="Applicant Name">
+                  <td className="strong breakText" data-label="Applicant Name">
                     {x.name}
                   </td>
 
                   <td data-label="Depository">{x.depository}</td>
 
-                  <td data-label="PAN Card Number">{x.pan}</td>
+                  <td className="sensitiveValue" data-label="PAN Card Number">
+                    {x.pan}
+                  </td>
 
-                  <td data-label="Beneficiary Number/ID">{x.beneficiaryId}</td>
+                  <td
+                    className="sensitiveValue"
+                    data-label="Beneficiary Number/ID"
+                  >
+                    {x.beneficiaryId}
+                  </td>
 
                   <td className="actionCol" data-label="Action">
                     <div className="actionsCell">
@@ -1393,15 +1529,10 @@ function AdminPanel({
             }
           }}
         >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-ipo-title"
-          >
+          <div className="modal" role="dialog" aria-modal="true">
             <div className="modalHeader">
               <div>
-                <h2 id="add-ipo-title">Add New IPO</h2>
+                <h2>Add New IPO</h2>
 
                 <p>Enter the IPO details before adding it.</p>
               </div>
@@ -1558,15 +1689,10 @@ function AdminPanel({
             }
           }}
         >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-applicant-title"
-          >
+          <div className="modal" role="dialog" aria-modal="true">
             <div className="modalHeader">
               <div>
-                <h2 id="add-applicant-title">Add New Applicant</h2>
+                <h2>Add New Applicant</h2>
 
                 <p>Enter the applicant details before adding.</p>
               </div>
@@ -1676,15 +1802,10 @@ function AdminPanel({
             }
           }}
         >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-ipo-title"
-          >
+          <div className="modal" role="dialog" aria-modal="true">
             <div className="modalHeader">
               <div>
-                <h2 id="edit-ipo-title">Edit IPO</h2>
+                <h2>Edit IPO</h2>
 
                 <p>Update the IPO details below.</p>
               </div>
@@ -1841,15 +1962,10 @@ function AdminPanel({
             }
           }}
         >
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-applicant-title"
-          >
+          <div className="modal" role="dialog" aria-modal="true">
             <div className="modalHeader">
               <div>
-                <h2 id="edit-applicant-title">Edit Applicant</h2>
+                <h2>Edit Applicant</h2>
 
                 <p>Update the applicant details below.</p>
               </div>
@@ -1949,10 +2065,15 @@ function AdminPanel({
   );
 }
 
+// ============================================================
+// CARD
+// ============================================================
+
 function Card({ label, value }) {
   return (
     <div className="card">
       <span>{label}</span>
+
       <strong>{value ?? 0}</strong>
     </div>
   );
