@@ -11,6 +11,8 @@
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "ipo-tracker-minimal": "file:..",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "vite": "^6.1.0"

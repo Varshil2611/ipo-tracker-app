@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import "./styles.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
@@ -11,6 +13,11 @@ const money = (n) =>
     maximumFractionDigits: 0,
   }).format(Number(n || 0));
 
+const moneyPdf = (n) =>
+  `Rs. ${Number(n || 0).toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+  })}`;
+
 const dateFmt = (v) =>
   v
     ? new Date(v).toLocaleDateString("en-IN", {
@@ -19,6 +26,22 @@ const dateFmt = (v) =>
         year: "numeric",
       })
     : "—";
+
+const displayFilterDate = (v) => {
+  if (!v) return "—";
+
+  const [year, month, day] = v.split("-");
+
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+  ).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
 
 const dateInput = (v) => {
   if (!v) return "";
@@ -79,10 +102,7 @@ function App() {
 
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // ---------------------------------
   // LOAD DATA
-  // ---------------------------------
-
   async function load() {
     try {
       const [dashboardResponse, ipoResponse, applicantResponse] =
@@ -122,25 +142,16 @@ function App() {
     }
   }
 
-  // ---------------------------------
   // INITIAL LOAD + 12 HOUR REFRESH
-  // ---------------------------------
-
   useEffect(() => {
     load();
 
-    // Refresh frontend every 12 hours.
-    // This only reloads the already-synced backend data.
-    // The backend itself also performs Google Sheets sync every 12 hours.
     const timer = setInterval(load, 12 * 60 * 60 * 1000);
 
     return () => clearInterval(timer);
   }, []);
 
-  // ---------------------------------
   // BACK TO TOP
-  // ---------------------------------
-
   useEffect(() => {
     const onScroll = () => {
       setShowBackToTop(window.scrollY > 400);
@@ -164,10 +175,7 @@ function App() {
     });
   };
 
-  // ---------------------------------
   // PUBLIC GOOGLE SHEETS SYNC
-  // ---------------------------------
-
   const publicSync = async () => {
     if (syncing) return;
 
@@ -194,10 +202,7 @@ function App() {
     }
   };
 
-  // ---------------------------------
   // FILTER + SORT
-  // ---------------------------------
-
   const filtered = useMemo(() => {
     let list = ipos.filter((x) => {
       const d = x.date ? new Date(x.date).toISOString().slice(0, 10) : "";
@@ -254,6 +259,42 @@ function App() {
     return list;
   }, [ipos, search, status, dateFrom, dateTo, sort]);
 
+  // DYNAMIC REPORT SUMMARY
+  // Uses ONLY the currently filtered IPO data.
+  // Investment is calculated internally only for ROI.
+  const reportSummary = useMemo(() => {
+    const totalApplications = filtered.reduce(
+      (sum, x) => sum + Number(x.applicants || 0),
+      0,
+    );
+
+    const totalAllotments = filtered.reduce(
+      (sum, x) => sum + Number(x.allotments || 0),
+      0,
+    );
+
+    const totalInvestment = filtered.reduce(
+      (sum, x) => sum + Number(x.investment ?? x.totalInvestment ?? 0),
+      0,
+    );
+
+    const totalProfit = filtered.reduce(
+      (sum, x) => sum + Number(x.profit || 0),
+      0,
+    );
+
+    const roi = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
+
+    return {
+      totalIpos: filtered.length,
+      totalApplications,
+      totalAllotments,
+      totalInvestment,
+      totalProfit,
+      roi,
+    };
+  }, [filtered]);
+
   const clearFilters = () => {
     setSearch("");
     setStatus("all");
@@ -262,10 +303,471 @@ function App() {
     setSort("dateDesc");
   };
 
-  // ---------------------------------
-  // ADMIN LOGIN
-  // ---------------------------------
+  // PDF REPORT
+  const downloadReportPdf = () => {
+    if (!filtered.length) {
+      alert("No IPO data found for the selected filters.");
+      return;
+    }
 
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    let periodLabel = "All IPO Records";
+
+    if (dateFrom && dateTo) {
+      periodLabel = `${displayFilterDate(dateFrom)} - ${displayFilterDate(
+        dateTo,
+      )}`;
+    } else if (dateFrom) {
+      periodLabel = `From ${displayFilterDate(dateFrom)}`;
+    } else if (dateTo) {
+      periodLabel = `Up to ${displayFilterDate(dateTo)}`;
+    }
+
+    // PDF colors
+    const navy = [24, 32, 52];
+    const blue = [59, 130, 246];
+    const green = [16, 185, 129];
+    const purple = [139, 92, 246];
+    const orange = [245, 158, 11];
+    const pink = [236, 72, 153];
+
+    const white = [255, 255, 255];
+    const light = [248, 250, 252];
+    const border = [226, 232, 240];
+    const text = [30, 41, 59];
+    const muted = [100, 116, 139];
+    const profitGreen = [21, 108, 73];
+
+    // =========================================================
+    // HEADER
+    // =========================================================
+
+    doc.setFillColor(...navy);
+    doc.rect(0, 0, pageWidth, 39, "F");
+
+    doc.setFillColor(...blue);
+    doc.rect(0, 37, pageWidth, 2, "F");
+
+    // Main title
+    doc.setFont("times", "bold");
+    doc.setFontSize(21);
+    doc.setTextColor(...white);
+    doc.text("IPO PORTFOLIO", 14, 16);
+
+    // Subtitle
+    doc.setFont("times", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(203, 213, 225);
+    doc.text("Investment Performance Report", 14, 24);
+
+    // Period
+    doc.setFont("times", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...white);
+    doc.text("REPORT PERIOD", pageWidth - 14, 13, {
+      align: "right",
+    });
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(203, 213, 225);
+    doc.text(periodLabel, pageWidth - 14, 20, {
+      align: "right",
+    });
+
+    // Generated date
+    doc.setFont("times", "italic");
+    doc.setFontSize(8);
+    doc.text(
+      `Generated ${new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`,
+      pageWidth - 14,
+      27,
+      {
+        align: "right",
+      },
+    );
+
+    // =========================================================
+    // PERFORMANCE OVERVIEW
+    // =========================================================
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(...text);
+    doc.text("Performance Overview", 14, 50);
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+
+    doc.text(
+      dateFrom || dateTo
+        ? "Based on the currently selected filters"
+        : "Based on all available IPO records",
+      14,
+      55,
+    );
+
+    // =========================================================
+    // KPI CARDS
+    // =========================================================
+
+    const cards = [
+      {
+        label: "TOTAL IPOs",
+        value: String(reportSummary.totalIpos),
+        color: blue,
+      },
+      {
+        label: "APPLICATIONS",
+        value: String(reportSummary.totalApplications),
+        color: green,
+      },
+      {
+        label: "ALLOTMENTS",
+        value: String(reportSummary.totalAllotments),
+        color: purple,
+      },
+      {
+        label: "TOTAL PROFIT",
+        value: moneyPdf(reportSummary.totalProfit),
+        color: orange,
+      },
+      {
+        label: "ROI",
+        value: `${reportSummary.roi.toFixed(2)}%`,
+        color: pink,
+      },
+    ];
+
+    const cardGap = 5;
+
+    const cardWidth =
+      (pageWidth - 28 - cardGap * (cards.length - 1)) / cards.length;
+
+    const cardY = 61;
+    const cardHeight = 27;
+
+    cards.forEach((card, index) => {
+      const x = 14 + index * (cardWidth + cardGap);
+
+      // Card background
+      doc.setFillColor(...white);
+      doc.setDrawColor(...border);
+
+      doc.roundedRect(x, cardY, cardWidth, cardHeight, 2.5, 2.5, "FD");
+
+      // Colored top strip
+      doc.setFillColor(...card.color);
+
+      doc.roundedRect(x, cardY, cardWidth, 2.5, 1.2, 1.2, "F");
+
+      // Label
+      doc.setFont("times", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(...muted);
+
+      doc.text(card.label, x + 7, cardY + 11);
+
+      // Value
+      doc.setFont("times", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(...text);
+
+      doc.text(card.value, x + 7, cardY + 21);
+    });
+
+    // =========================================================
+    // FILTER INFORMATION
+    // =========================================================
+
+    const statusLabel =
+      status === "all"
+        ? "All Status"
+        : status === "allotted"
+          ? "Allotted"
+          : "No Allotment";
+
+    const filterText = [
+      search.trim() ? `Search: "${search.trim()}"` : null,
+      status !== "all" ? `Status: ${statusLabel}` : null,
+    ]
+      .filter(Boolean)
+      .join("  •  ");
+
+    if (filterText) {
+      doc.setFont("times", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+
+      doc.text(filterText, 14, 95);
+    }
+
+    const tableStartY = filterText ? 103 : 98;
+
+    // =========================================================
+    // IPO PERFORMANCE TITLE
+    // =========================================================
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(...text);
+
+    doc.text("IPO Performance", 14, tableStartY);
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+
+    doc.text(
+      `${filtered.length} IPO record${filtered.length === 1 ? "" : "s"}`,
+      pageWidth - 14,
+      tableStartY,
+      {
+        align: "right",
+      },
+    );
+
+    // =========================================================
+    // TABLE DATA
+    // =========================================================
+
+    const tableBody = filtered.map((x) => {
+      const investment = Number(x.investment ?? x.totalInvestment ?? 0);
+
+      const profit = Number(x.profit || 0);
+
+      const roi = investment > 0 ? (profit / investment) * 100 : 0;
+
+      return [
+        dateFmt(x.date),
+        String(x.name || "—"),
+        String(x.applicants ?? 0),
+        moneyPdf(investment),
+        String(x.allotments ?? 0),
+        moneyPdf(profit),
+        `${roi.toFixed(2)}%`,
+      ];
+    });
+
+    // =========================================================
+    // TOTAL ROW
+    // IMPORTANT:
+    // Added to BODY instead of FOOT.
+    // Therefore it appears ONLY ONCE after the final IPO.
+    // =========================================================
+
+    tableBody.push([
+      "",
+      "TOTAL",
+      String(reportSummary.totalApplications),
+      "",
+      String(reportSummary.totalAllotments),
+      moneyPdf(reportSummary.totalProfit),
+      `${reportSummary.roi.toFixed(2)}%`,
+    ]);
+
+    const totalRowIndex = tableBody.length - 1;
+
+    // =========================================================
+    // IPO TABLE
+    // =========================================================
+
+    autoTable(doc, {
+      startY: tableStartY + 5,
+
+      margin: {
+        left: 14,
+        right: 14,
+        bottom: 20,
+      },
+
+      head: [
+        [
+          "DATE",
+          "IPO",
+          "APPLICATIONS",
+          "INVESTMENT",
+          "ALLOTMENTS",
+          "PROFIT",
+          "ROI",
+        ],
+      ],
+
+      body: tableBody,
+
+      theme: "plain",
+
+      styles: {
+        font: "times",
+        fontStyle: "bold",
+        fontSize: 10,
+        textColor: text,
+
+        cellPadding: {
+          top: 4,
+          right: 4,
+          bottom: 4,
+          left: 4,
+        },
+
+        lineColor: border,
+        lineWidth: 0.25,
+        valign: "middle",
+      },
+
+      headStyles: {
+        fillColor: navy,
+        textColor: white,
+        font: "times",
+        fontStyle: "bold",
+        fontSize: 8,
+
+        cellPadding: 4,
+
+        halign: "left",
+      },
+
+      alternateRowStyles: {
+        fillColor: light,
+      },
+
+      columnStyles: {
+        0: {
+          cellWidth: 28,
+        },
+
+        1: {
+          cellWidth: 70,
+          fontStyle: "bold",
+        },
+
+        2: {
+          cellWidth: 29,
+          halign: "center",
+        },
+
+        3: {
+          cellWidth: 34,
+          halign: "right",
+        },
+
+        4: {
+          cellWidth: 29,
+          halign: "center",
+        },
+
+        5: {
+          cellWidth: 34,
+          halign: "right",
+          fontStyle: "bold",
+        },
+
+        6: {
+          cellWidth: 27,
+          halign: "right",
+          fontStyle: "bold",
+        },
+      },
+
+      didParseCell: (data) => {
+        // ==========================================
+        // TOTAL ROW
+        // ==========================================
+
+        if (data.section === "body" && data.row.index === totalRowIndex) {
+          data.cell.styles.fillColor = [241, 245, 249];
+          data.cell.styles.textColor = text;
+          data.cell.styles.font = "times";
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.fontSize = 8.5;
+          data.cell.styles.lineWidth = 0.5;
+
+          return;
+        }
+
+        // ==========================================
+        // PROFIT
+        // ==========================================
+
+        if (data.section === "body" && data.column.index === 5) {
+          data.cell.styles.textColor = profitGreen;
+          data.cell.styles.font = "times";
+          data.cell.styles.fontStyle = "bold";
+        }
+
+        // ==========================================
+        // ROI
+        // ==========================================
+
+        if (data.section === "body" && data.column.index === 6) {
+          data.cell.styles.textColor = [190, 24, 93];
+          data.cell.styles.font = "times";
+          data.cell.styles.fontStyle = "bold";
+        }
+      },
+    });
+
+    // =========================================================
+    // FOOTER ON EVERY PAGE
+    // =========================================================
+
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+
+      doc.setDrawColor(...border);
+      doc.setLineWidth(0.3);
+
+      doc.line(14, pageHeight - 13, pageWidth - 14, pageHeight - 13);
+
+      doc.setFont("times", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+
+      doc.text("Built with love by Varshil", 14, pageHeight - 7);
+
+      doc.text(
+        `Page ${page} of ${totalPages}`,
+        pageWidth - 14,
+        pageHeight - 7,
+        {
+          align: "right",
+        },
+      );
+    }
+
+    // =========================================================
+    // FILE NAME
+    // =========================================================
+
+    let filePart = "All-Data";
+
+    if (dateFrom && dateTo) {
+      filePart = `${dateFrom}-to-${dateTo}`;
+    } else if (dateFrom) {
+      filePart = `From-${dateFrom}`;
+    } else if (dateTo) {
+      filePart = `Up-to-${dateTo}`;
+    }
+
+    doc.save(`IPO-Portfolio-Report-${filePart}.pdf`);
+  };
+
+  // ADMIN LOGIN
   const adminLogin = async () => {
     if (!pin.trim()) {
       alert("Please enter the Admin PIN.");
@@ -313,10 +815,7 @@ function App() {
     }
   };
 
-  // ---------------------------------
   // LOGOUT
-  // ---------------------------------
-
   const logout = () => {
     setAdmin(false);
     setAdminIpos([]);
@@ -324,10 +823,7 @@ function App() {
     setPin("");
   };
 
-  // ---------------------------------
   // ADMIN GOOGLE SHEETS SYNC
-  // ---------------------------------
-
   const sync = async () => {
     if (syncing) return;
 
@@ -375,10 +871,7 @@ function App() {
     }
   };
 
-  // ---------------------------------
   // SAVE IPOs
-  // ---------------------------------
-
   const saveIpos = async () => {
     const confirmed = window.confirm(
       "Are you sure you want to save all IPO changes to Google Sheets?",
@@ -430,10 +923,7 @@ function App() {
     }
   };
 
-  // ---------------------------------
   // SAVE APPLICANTS
-  // ---------------------------------
-
   const saveApps = async () => {
     const confirmed = window.confirm(
       "Are you sure you want to save all applicant changes to Google Sheets?",
@@ -485,10 +975,7 @@ function App() {
     }
   };
 
-  // ---------------------------------
   // UPDATE IPO
-  // ---------------------------------
-
   const updateIpo = (index, key, value) => {
     setAdminIpos((current) =>
       current.map((item, itemIndex) =>
@@ -502,10 +989,7 @@ function App() {
     );
   };
 
-  // ---------------------------------
   // UPDATE APPLICANT
-  // ---------------------------------
-
   const updateApp = (index, key, value) => {
     setAdminApps((current) =>
       current.map((item, itemIndex) =>
@@ -564,29 +1048,48 @@ function App() {
       </header>
 
       <main>
-        {/* ---------------------------------
-            DASHBOARD CARDS
-        ---------------------------------- */}
+        {/* DYNAMIC DASHBOARD CARDS */}
+        <section className="cards reportCards">
+          <Card label="Total IPOs" value={reportSummary.totalIpos} />
 
-        <section className="cards">
-          <Card label="Total IPOs" value={dash["Total IPOs"]} />
+          <Card label="Applications" value={reportSummary.totalApplications} />
 
-          <Card label="Applications" value={dash["Total Applications"]} />
+          <Card label="Allotments" value={reportSummary.totalAllotments} />
 
-          <Card label="Allotments" value={dash["Total Allotments"]} />
+          <Card label="Total Profit" value={money(reportSummary.totalProfit)} />
 
-          <Card
-            label="Total Amount"
-            value={money(530000 + Number(dash["Total Profit"] || 0))}
-          />
-
-          <Card label="Profit" value={money(dash["Total Profit"])} />
+          <Card label="ROI" value={`${reportSummary.roi.toFixed(2)}%`} />
         </section>
 
-        {/* ---------------------------------
-            NAVIGATION
-        ---------------------------------- */}
+        {/* REPORT BAR */}
+        <div className="dashboardReportBar">
+          <div>
+            <strong>
+              {dateFrom || dateTo ? "Filtered Report" : "All Data Report"}
+            </strong>
 
+            <span>
+              {dateFrom || dateTo
+                ? ` • ${dateFrom ? displayFilterDate(dateFrom) : "Start"} → ${
+                    dateTo ? displayFilterDate(dateTo) : "Today"
+                  }`
+                : " • All IPO records"}
+            </span>
+
+            <small>Dashboard totals and PDF use the current filters.</small>
+          </div>
+
+          <button
+            type="button"
+            className="pdfBtn"
+            onClick={downloadReportPdf}
+            disabled={filtered.length === 0}
+          >
+            Download PDF
+          </button>
+        </div>
+
+        {/* NAVIGATION */}
         <nav>
           <button
             className={tab === "ipos" ? "active" : ""}
@@ -610,10 +1113,7 @@ function App() {
           </button>
         </nav>
 
-        {/* ---------------------------------
-            IPO SUMMARY
-        ---------------------------------- */}
-
+        {/* IPO SUMMARY */}
         {tab === "ipos" && (
           <section className="panel">
             <FilterBar
@@ -696,10 +1196,7 @@ function App() {
           </section>
         )}
 
-        {/* ---------------------------------
-            APPLICANTS
-        ---------------------------------- */}
-
+        {/* APPLICANTS */}
         {tab === "applicants" && (
           <section className="panel">
             <div className="toolbar">
@@ -768,10 +1265,7 @@ function App() {
           </section>
         )}
 
-        {/* ---------------------------------
-            ADMIN LOGIN
-        ---------------------------------- */}
-
+        {/* ADMIN LOGIN */}
         {tab === "admin" && !admin && (
           <section className="adminLogin">
             <h2>Admin Login</h2>
@@ -799,10 +1293,7 @@ function App() {
           </section>
         )}
 
-        {/* ---------------------------------
-            ADMIN PANEL
-        ---------------------------------- */}
-
+        {/* ADMIN PANEL */}
         {tab === "admin" && admin && (
           <AdminPanel
             logout={logout}
@@ -838,10 +1329,7 @@ function App() {
   );
 }
 
-// ============================================================
 // FILTER BAR
-// ============================================================
-
 function FilterBar({
   search,
   setSearch,
@@ -872,15 +1360,10 @@ function FilterBar({
 
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="dateDesc">Newest date</option>
-
           <option value="dateAsc">Oldest date</option>
-
           <option value="profit">Highest profit</option>
-
           <option value="investment">Highest investment</option>
-
           <option value="roi">Highest ROI</option>
-
           <option value="applicants">Most applicants</option>
         </select>
       </div>
@@ -912,10 +1395,7 @@ function FilterBar({
   );
 }
 
-// ============================================================
 // ADMIN PANEL
-// ============================================================
-
 function AdminPanel({
   logout,
   adminIpos,
@@ -946,10 +1426,6 @@ function AdminPanel({
 
   const [editApplicantDraft, setEditApplicantDraft] = useState(null);
 
-  // ---------------------------------
-  // EDIT IPO MODAL
-  // ---------------------------------
-
   const openEditIpoModal = (index) => {
     setEditIpoIndex(index);
     setEditIpoDraft({
@@ -962,13 +1438,8 @@ function AdminPanel({
     setEditIpoDraft(null);
   };
 
-  // ---------------------------------
-  // EDIT APPLICANT MODAL
-  // ---------------------------------
-
   const openEditApplicantModal = (index) => {
     setEditApplicantIndex(index);
-
     setEditApplicantDraft({
       ...adminApps[index],
     });
@@ -978,10 +1449,6 @@ function AdminPanel({
     setEditApplicantIndex(null);
     setEditApplicantDraft(null);
   };
-
-  // ---------------------------------
-  // SAVE EDIT IPO
-  // ---------------------------------
 
   const saveEditIpo = () => {
     if (!String(editIpoDraft.name || "").trim()) {
@@ -1006,19 +1473,12 @@ function AdminPanel({
 
     const updatedIpo = {
       ...editIpoDraft,
-
       name: String(editIpoDraft.name).trim(),
-
       applicants: Number(editIpoDraft.applicants) || 0,
-
       retailAmount: Number(editIpoDraft.retailAmount) || 0,
-
       investment,
-
       allotments: Number(editIpoDraft.allotments) || 0,
-
       profit,
-
       roi: investment > 0 ? (profit / investment) * 100 : 0,
     };
 
@@ -1030,10 +1490,6 @@ function AdminPanel({
 
     closeEditIpoModal();
   };
-
-  // ---------------------------------
-  // SAVE EDIT APPLICANT
-  // ---------------------------------
 
   const saveEditApplicant = () => {
     if (!String(editApplicantDraft.name || "").trim()) {
@@ -1061,13 +1517,9 @@ function AdminPanel({
 
     const updatedApplicant = {
       ...editApplicantDraft,
-
       name: String(editApplicantDraft.name).trim(),
-
       depository: String(editApplicantDraft.depository).trim(),
-
       pan: String(editApplicantDraft.pan).trim().toUpperCase(),
-
       beneficiaryId: String(editApplicantDraft.beneficiaryId).trim(),
     };
 
@@ -1080,10 +1532,6 @@ function AdminPanel({
     closeEditApplicantModal();
   };
 
-  // ---------------------------------
-  // ADD IPO MODAL
-  // ---------------------------------
-
   const openIpoModal = () => {
     setNewIpo(blankIpo());
     setShowIpoModal(true);
@@ -1094,10 +1542,6 @@ function AdminPanel({
     setNewIpo(blankIpo());
   };
 
-  // ---------------------------------
-  // ADD APPLICANT MODAL
-  // ---------------------------------
-
   const openApplicantModal = () => {
     setNewApplicant(blankApplicant());
     setShowApplicantModal(true);
@@ -1107,10 +1551,6 @@ function AdminPanel({
     setShowApplicantModal(false);
     setNewApplicant(blankApplicant());
   };
-
-  // ---------------------------------
-  // ESCAPE KEY
-  // ---------------------------------
 
   useEffect(() => {
     const anyModalOpen =
@@ -1149,10 +1589,6 @@ function AdminPanel({
 
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [showIpoModal, showApplicantModal, editIpoIndex, editApplicantIndex]);
-
-  // ---------------------------------
-  // ADD IPO
-  // ---------------------------------
 
   const addIpo = () => {
     if (!String(newIpo.name || "").trim()) {
@@ -1199,21 +1635,13 @@ function AdminPanel({
 
     const ipoToAdd = {
       ...newIpo,
-
       id: newIpo.id || Date.now(),
-
       name: String(newIpo.name).trim(),
-
       applicants: Number(newIpo.applicants) || 0,
-
       retailAmount: Number(newIpo.retailAmount) || 0,
-
       investment,
-
       allotments: Number(newIpo.allotments) || 0,
-
       profit,
-
       roi: investment > 0 ? (profit / investment) * 100 : 0,
     };
 
@@ -1221,10 +1649,6 @@ function AdminPanel({
 
     closeIpoModal();
   };
-
-  // ---------------------------------
-  // ADD APPLICANT
-  // ---------------------------------
 
   const addApplicant = () => {
     if (!String(newApplicant.name || "").trim()) {
@@ -1263,13 +1687,9 @@ function AdminPanel({
 
     const applicantToAdd = {
       ...newApplicant,
-
       name: String(newApplicant.name).trim(),
-
       depository: String(newApplicant.depository).trim(),
-
       pan: String(newApplicant.pan).trim().toUpperCase(),
-
       beneficiaryId: String(newApplicant.beneficiaryId).trim(),
     };
 
@@ -1277,10 +1697,6 @@ function AdminPanel({
 
     closeApplicantModal();
   };
-
-  // ---------------------------------
-  // DELETE IPO
-  // ---------------------------------
 
   const deleteIpo = (index, name) => {
     const confirmed = window.confirm(
@@ -1296,13 +1712,11 @@ function AdminPanel({
     );
   };
 
-  // ---------------------------------
-  // DELETE APPLICANT
-  // ---------------------------------
-
   const deleteApplicant = (index, name) => {
     const confirmed = window.confirm(
-      `Are you sure you want to delete applicant "${name || "this applicant"}"?`,
+      `Are you sure you want to delete applicant "${
+        name || "this applicant"
+      }"?`,
     );
 
     if (!confirmed) {
@@ -1316,14 +1730,9 @@ function AdminPanel({
 
   return (
     <section className="adminPanel">
-      {/* ---------------------------------
-          ADMIN HEADER
-      ---------------------------------- */}
-
       <div className="adminHeader">
         <div>
           <h2>Admin Panel</h2>
-
           <p>Manage your IPO activity with ease and precision.</p>
         </div>
 
@@ -1337,10 +1746,6 @@ function AdminPanel({
           </button>
         </div>
       </div>
-
-      {/* ---------------------------------
-          IPO ADMIN SECTION
-      ---------------------------------- */}
 
       <div className="adminSection">
         <div className="sectionTitle">
@@ -1433,10 +1838,6 @@ function AdminPanel({
         </div>
       </div>
 
-      {/* ---------------------------------
-          APPLICANT ADMIN SECTION
-      ---------------------------------- */}
-
       <div className="adminSection">
         <div className="sectionTitle">
           <h3>Applicant Details</h3>
@@ -1516,10 +1917,7 @@ function AdminPanel({
         </div>
       </div>
 
-      {/* ---------------------------------
-          ADD IPO MODAL
-      ---------------------------------- */}
-
+      {/* ADD IPO MODAL */}
       {showIpoModal && (
         <div
           className="modalOverlay"
@@ -1533,7 +1931,6 @@ function AdminPanel({
             <div className="modalHeader">
               <div>
                 <h2>Add New IPO</h2>
-
                 <p>Enter the IPO details before adding it.</p>
               </div>
 
@@ -1676,10 +2073,7 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ---------------------------------
-          ADD APPLICANT MODAL
-      ---------------------------------- */}
-
+      {/* ADD APPLICANT MODAL */}
       {showApplicantModal && (
         <div
           className="modalOverlay"
@@ -1693,7 +2087,6 @@ function AdminPanel({
             <div className="modalHeader">
               <div>
                 <h2>Add New Applicant</h2>
-
                 <p>Enter the applicant details before adding.</p>
               </div>
 
@@ -1736,7 +2129,6 @@ function AdminPanel({
                   }
                 >
                   <option value="CDSL">CDSL</option>
-
                   <option value="NSDL">NSDL</option>
                 </select>
               </label>
@@ -1789,10 +2181,7 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ---------------------------------
-          EDIT IPO MODAL
-      ---------------------------------- */}
-
+      {/* EDIT IPO MODAL */}
       {editIpoIndex !== null && editIpoDraft && (
         <div
           className="modalOverlay"
@@ -1806,7 +2195,6 @@ function AdminPanel({
             <div className="modalHeader">
               <div>
                 <h2>Edit IPO</h2>
-
                 <p>Update the IPO details below.</p>
               </div>
 
@@ -1949,10 +2337,7 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ---------------------------------
-          EDIT APPLICANT MODAL
-      ---------------------------------- */}
-
+      {/* EDIT APPLICANT MODAL */}
       {editApplicantIndex !== null && editApplicantDraft && (
         <div
           className="modalOverlay"
@@ -1966,7 +2351,6 @@ function AdminPanel({
             <div className="modalHeader">
               <div>
                 <h2>Edit Applicant</h2>
-
                 <p>Update the applicant details below.</p>
               </div>
 
@@ -2009,7 +2393,6 @@ function AdminPanel({
                   }
                 >
                   <option value="CDSL">CDSL</option>
-
                   <option value="NSDL">NSDL</option>
                 </select>
               </label>
@@ -2065,15 +2448,11 @@ function AdminPanel({
   );
 }
 
-// ============================================================
 // CARD
-// ============================================================
-
 function Card({ label, value }) {
   return (
     <div className="card">
       <span>{label}</span>
-
       <strong>{value ?? 0}</strong>
     </div>
   );
