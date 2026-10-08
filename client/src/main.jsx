@@ -79,6 +79,7 @@ function App() {
   const [ipos, setIpos] = useState([]);
   const [apps, setApps] = useState([]);
   const [dash, setDash] = useState({});
+  const [investments, setInvestments] = useState([]);
 
   const [search, setSearch] = useState("");
   const [appSearch, setAppSearch] = useState("");
@@ -96,6 +97,7 @@ function App() {
 
   const [adminIpos, setAdminIpos] = useState([]);
   const [adminApps, setAdminApps] = useState([]);
+  const [adminInvestments, setAdminInvestments] = useState([]);
 
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -123,6 +125,18 @@ function App() {
       setDash(dashboardData.dashboard || {});
       setIpos(ipoData.data || []);
       setApps(applicantData.data || []);
+
+      try {
+        const investmentResponse = await fetch(`${API_URL}/api/investments`);
+
+        if (investmentResponse.ok) {
+          const investmentData = await investmentResponse.json();
+
+          setInvestments(investmentData.data || []);
+        }
+      } catch (investmentError) {
+        console.error("Could not load investments:", investmentError);
+      }
 
       setLastSync(
         dashboardData.lastSynced ||
@@ -283,7 +297,9 @@ function App() {
       0,
     );
 
-    const roi = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
+    const initialCapital = Number(dash["Initial Capital"] || 0);
+
+    const roi = initialCapital > 0 ? (totalProfit / initialCapital) * 100 : 0;
 
     return {
       totalIpos: filtered.length,
@@ -293,7 +309,7 @@ function App() {
       totalProfit,
       roi,
     };
-  }, [filtered]);
+  }, [filtered, dash]);
 
   const clearFilters = () => {
     setSearch("");
@@ -807,6 +823,7 @@ function App() {
 
       setAdminIpos(data.ipos || []);
       setAdminApps(data.applicants || []);
+      setAdminInvestments(data.investments || []);
 
       setAdmin(true);
     } catch (error) {
@@ -820,6 +837,7 @@ function App() {
     setAdmin(false);
     setAdminIpos([]);
     setAdminApps([]);
+    setAdminInvestments([]);
     setPin("");
   };
 
@@ -1059,6 +1077,21 @@ function App() {
           <Card label="Total Profit" value={money(reportSummary.totalProfit)} />
 
           <Card label="ROI" value={`${reportSummary.roi.toFixed(2)}%`} />
+
+          <Card
+            label="Stock Investment"
+            value={money(dash["Stock Investment"])}
+          />
+
+          <Card
+            label="Stock Profit/Loss"
+            value={money(dash["Stock Profit/Loss"])}
+          />
+
+          <Card
+            label="Available Capital"
+            value={money(dash["Available Capital"])}
+          />
         </section>
 
         {/* REPORT BAR */}
@@ -1103,6 +1136,13 @@ function App() {
             onClick={() => setTab("applicants")}
           >
             Applicants
+          </button>
+
+          <button
+            className={tab === "investments" ? "active" : ""}
+            onClick={() => setTab("investments")}
+          >
+            Investments
           </button>
 
           <button
@@ -1265,7 +1305,129 @@ function App() {
           </section>
         )}
 
+        {/* INVESTMENTS */}
+        {/* INVESTMENTS */}
+        {tab === "investments" && (
+          <section className="panel">
+            {investments.length === 0 ? (
+              <div className="resultCount">No investments added.</div>
+            ) : (
+              <>
+                <div className="resultCount">
+                  Held investments are deducted from Available Capital. Sold
+                  investments add their profit or subtract their loss.
+                </div>
+
+                <div className="tableWrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Investment</th>
+                        <th className="num">Amount</th>
+                        <th>Purchase Date</th>
+                        <th>Sold Date</th>
+                        <th className="num">Profit/Loss</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {investments.map((x, index) => (
+                        <tr key={index}>
+                          <td
+                            className="strong breakText"
+                            data-label="Investment"
+                          >
+                            {x.name}
+                          </td>
+
+                          <td className="num" data-label="Amount">
+                            {money(x.amount)}
+                          </td>
+
+                          <td data-label="Purchase Date">
+                            {dateFmt(x.purchaseDate)}
+                          </td>
+
+                          <td data-label="Sold Date">{dateFmt(x.soldDate)}</td>
+
+                          <td className="num" data-label="Profit/Loss">
+                            {x.soldDate ? money(x.profit) : "—"}
+                          </td>
+
+                          <td data-label="Status">
+                            {x.soldDate ? "Sold" : "Holding"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         {/* ADMIN LOGIN */}
+        {/* INVESTMENTS */}
+        {/* {tab === "investments" && (
+          <section className="panel">
+            <div className="resultCount">
+              Held investments are deducted from Available Capital. Sold
+              investments add their profit or subtract their loss.
+            </div>
+
+            <div className="tableWrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Investment</th>
+                    <th>Amount</th>
+                    <th>Purchase Date</th>
+                    <th>Sold Date</th>
+                    <th>Profit/Loss</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {investments.map((x, index) => (
+                    <tr key={index}>
+                      <td className="strong breakText" data-label="Investment">
+                        {x.name}
+                      </td>
+
+                      <td className="num" data-label="Amount">
+                        {money(x.amount)}
+                      </td>
+
+                      <td data-label="Purchase Date">
+                        {x.purchaseDate || "—"}
+                      </td>
+
+                      <td data-label="Sold Date">{x.soldDate || "—"}</td>
+
+                      <td className="num" data-label="Profit/Loss">
+                        {x.soldDate ? money(x.profit) : "—"}
+                      </td>
+
+                      <td data-label="Status">
+                        {x.soldDate ? "Sold" : "Holding"}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {investments.length === 0 && (
+                    <tr>
+                      <td colSpan="6">No investments added.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )} */}
+
         {tab === "admin" && !admin && (
           <section className="adminLogin">
             <h2>Admin Login</h2>
@@ -1311,7 +1473,15 @@ function App() {
           />
         )}
 
-        <footer>Built with ❤️ by Varshil</footer>
+        {/* INVESTMENTS (ADMIN ONLY) */}
+        {tab === "admin" && admin && (
+          <InvestmentsAdmin
+            pin={pin}
+            investments={adminInvestments}
+            setInvestments={setAdminInvestments}
+            reload={load}
+          />
+        )}
       </main>
 
       {showBackToTop && (
@@ -2439,6 +2609,390 @@ function AdminPanel({
 
               <button type="button" onClick={saveEditApplicant}>
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const toInputDate = (v) => {
+  if (!v) return "";
+
+  const s = String(v).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  const d = new Date(s);
+
+  if (Number.isNaN(d.getTime())) return "";
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+function InvestmentsAdmin({ pin, investments, setInvestments, reload }) {
+  const blank = {
+    name: "",
+    amount: "",
+    purchaseDate: "",
+    soldDate: "",
+    profit: "",
+  };
+
+  const [saving, setSaving] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editIndex, setEditIndex] = useState(null); // null = adding new
+  const [draft, setDraft] = useState(blank);
+  const [dirty, setDirty] = useState(false);
+
+  const holding = investments
+    .filter((x) => !x.soldDate)
+    .reduce((sum, x) => sum + Number(x.amount || 0), 0);
+
+  const realized = investments
+    .filter((x) => x.soldDate)
+    .reduce((sum, x) => sum + Number(x.profit || 0), 0);
+
+  const openAdd = () => {
+    setEditIndex(null);
+    setDraft(blank);
+    setShowModal(true);
+  };
+
+  const openEdit = (index) => {
+    const x = investments[index];
+
+    setEditIndex(index);
+
+    setDraft({
+      name: x.name || "",
+      amount: x.amount ?? "",
+      purchaseDate: toInputDate(x.purchaseDate),
+      soldDate: toInputDate(x.soldDate),
+      profit: x.soldDate ? (x.profit ?? "") : "",
+    });
+
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditIndex(null);
+    setDraft(blank);
+  };
+
+  const submitDraft = () => {
+    const name = String(draft.name).trim();
+    const amount = Number(draft.amount);
+
+    if (!name) {
+      alert("Please enter an investment name.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Please enter an amount greater than 0.");
+      return;
+    }
+
+    if (
+      draft.soldDate &&
+      draft.purchaseDate &&
+      draft.soldDate < draft.purchaseDate
+    ) {
+      alert("Sold date cannot be before the purchase date.");
+      return;
+    }
+
+    if (draft.soldDate && String(draft.profit).trim() === "") {
+      alert(
+        "Enter the profit or loss for this sale. Use a minus for a loss (e.g. -300), or 0 if none.",
+      );
+      return;
+    }
+
+    const item = {
+      name,
+      amount,
+      purchaseDate: draft.purchaseDate || "",
+      soldDate: draft.soldDate || "",
+      profit: draft.soldDate ? Number(draft.profit) : 0,
+    };
+
+    if (editIndex === null) {
+      setInvestments((current) => [...current, item]);
+    } else {
+      setInvestments((current) =>
+        current.map((x, i) => (i === editIndex ? item : x)),
+      );
+    }
+
+    setDirty(true);
+    closeModal();
+  };
+
+  const deleteInvestment = (index, label) => {
+    if (!window.confirm(`Delete "${label}"?`)) {
+      return;
+    }
+
+    setInvestments((current) => current.filter((_, i) => i !== index));
+    setDirty(true);
+  };
+
+  const saveInvestments = async () => {
+    if (!window.confirm("Save investment changes to Google Sheets?")) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/investments`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          pin,
+          investments: investments.map((x) => ({
+            name: x.name,
+            amount: Number(x.amount || 0),
+            purchaseDate: toInputDate(x.purchaseDate),
+            soldDate: toInputDate(x.soldDate),
+            profit: x.soldDate ? Number(x.profit || 0) : 0,
+          })),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Could not save investments.");
+        return;
+      }
+
+      setInvestments(data.investments || []);
+      setDirty(false);
+
+      await reload();
+
+      alert("Investments saved to Google Sheets.");
+    } catch (error) {
+      console.error("Save investments failed:", error);
+      alert("Could not save investments.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="adminPanel">
+      <div className="adminSection">
+        <div className="sectionTitle">
+          <h3>Investments</h3>
+
+          <div>
+            <button className="lightBtn" onClick={openAdd}>
+              + Add Investment
+            </button>
+
+            <button onClick={saveInvestments} disabled={saving}>
+              {saving ? "Saving..." : "Save Investment Changes"}
+            </button>
+          </div>
+        </div>
+
+        {dirty && (
+          <p>
+            <strong>
+              You have unsaved changes. Click "Save Investment Changes" to
+              update Google Sheets.
+            </strong>
+          </p>
+        )}
+
+        <div className="tableWrap">
+          <table className="editTable">
+            <thead>
+              <tr>
+                <th>Investment</th>
+                <th className="num">Amount</th>
+                <th>Purchase Date</th>
+                <th>Sold Date</th>
+                <th className="num">Profit/Loss</th>
+                <th>Status</th>
+                <th className="actionCol">Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {investments.map((x, index) => (
+                <tr key={index}>
+                  <td className="strong breakText" data-label="Investment">
+                    {x.name}
+                  </td>
+
+                  <td className="num" data-label="Amount">
+                    {money(x.amount)}
+                  </td>
+
+                  <td data-label="Purchase Date">{dateFmt(x.purchaseDate)}</td>
+
+                  <td data-label="Sold Date">{x.soldDate || "—"}</td>
+
+                  <td className="num" data-label="Profit/Loss">
+                    {x.soldDate ? money(x.profit) : "—"}
+                  </td>
+
+                  <td data-label="Status">{x.soldDate ? "Sold" : "Holding"}</td>
+
+                  <td className="actionCol" data-label="Action">
+                    <div className="actionsCell">
+                      <button
+                        type="button"
+                        className="lightBtn"
+                        onClick={() => openEdit(index)}
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        type="button"
+                        className="dangerBtn"
+                        onClick={() => deleteInvestment(index, x.name)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {investments.length === 0 && (
+                <tr>
+                  <td colSpan="7">No investments added.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <strong>
+            Currently held: {money(holding)} · Realized profit/loss:{" "}
+            {money(realized)}
+          </strong>
+        </p>
+      </div>
+
+      {/* ADD / EDIT INVESTMENT MODAL */}
+      {showModal && (
+        <div
+          className="modalOverlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeModal();
+            }
+          }}
+        >
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modalHeader">
+              <div>
+                <h2>
+                  {editIndex === null ? "Add Investment" : "Edit Investment"}
+                </h2>
+                <p>
+                  Held investments are deducted from Available Capital. Sold
+                  ones add their profit or subtract their loss.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="modalClose"
+                onClick={closeModal}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modalForm">
+              <label>
+                Investment Name
+                <input
+                  type="text"
+                  placeholder="e.g. Money View"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                Amount Invested (₹)
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 5500"
+                  value={draft.amount}
+                  onChange={(e) =>
+                    setDraft({ ...draft, amount: e.target.value })
+                  }
+                />
+              </label>
+
+              <label>
+                Purchase Date
+                <input
+                  type="date"
+                  value={draft.purchaseDate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, purchaseDate: e.target.value })
+                  }
+                />
+              </label>
+
+              <label>
+                Sold Date (leave empty if still holding)
+                <input
+                  type="date"
+                  value={draft.soldDate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, soldDate: e.target.value })
+                  }
+                />
+              </label>
+
+              <label>
+                Profit / Loss (₹){" "}
+                {draft.soldDate ? "" : "(pick a Sold Date to enter this)"}
+                <input
+                  type="number"
+                  disabled={!draft.soldDate}
+                  placeholder="e.g. 500 or -300"
+                  value={draft.soldDate ? draft.profit : ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, profit: e.target.value })
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="modalActions">
+              <button type="button" className="lightBtn" onClick={closeModal}>
+                Cancel
+              </button>
+
+              <button type="button" onClick={submitDraft}>
+                {editIndex === null ? "Add Investment" : "Save Changes"}
               </button>
             </div>
           </div>

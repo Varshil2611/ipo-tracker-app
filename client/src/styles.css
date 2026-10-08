@@ -373,6 +373,18 @@ footer {
   background: #ec4899;
 }
 
+.reportCards .card:nth-child(6)::before {
+  background: #06b6d4;
+}
+
+.reportCards .card:nth-child(7)::before {
+  background: #6366f1;
+}
+
+.reportCards .card:nth-child(8)::before {
+  background: #14b8a6;
+}
+
 .card {
   background: var(--surface);
 

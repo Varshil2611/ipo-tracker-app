@@ -8,6 +8,7 @@ import {
   fetchData,
   writeIposRemote,
   writeApplicantsRemote,
+  writeInvestmentsRemote,
 } from "./appsScript.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,8 +37,25 @@ const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
 const syncInterval = Number(process.env.SYNC_INTERVAL_MS || TWELVE_HOURS);
 
+/*
+ * Fallback capital values.
+ *
+ * Used only if Google Apps Script does not return a "capital" object
+ * (for example, if the old Code.gs is still deployed).
+ */
+const DEFAULT_INITIAL_CAPITAL = 530000;
+
 let state = {
   dashboard: {},
+
+  capital: {
+    initialCapital: DEFAULT_INITIAL_CAPITAL,
+    stockInvestment: 0,
+    totalProfit: 0,
+    availableCapital: DEFAULT_INITIAL_CAPITAL,
+  },
+
+  investments: [],
 
   ipos: [],
 
@@ -83,8 +101,56 @@ function num(value) {
 }
 
 /* ============================================================
+   CAPITAL NORMALIZATION
+   ============================================================ */
+
+function normalizeCapital(input, totalProfit) {
+  const initialCapital =
+    input?.initialCapital !== undefined && num(input.initialCapital) > 0
+      ? num(input.initialCapital)
+      : DEFAULT_INITIAL_CAPITAL;
+
+  /* Money currently held in unsold investments */
+  const stockInvestment = Math.max(0, num(input?.stockInvestment));
+
+  /* Realized profit (+) or loss (-) from sold investments */
+  const stockProfit = num(input?.stockProfit);
+
+  const availableCapital =
+    initialCapital + totalProfit + stockProfit - stockInvestment;
+
+  return {
+    initialCapital,
+    stockInvestment,
+    stockProfit,
+    totalProfit,
+    availableCapital,
+  };
+}
+
+/* ============================================================
    IPO NORMALIZATION
    ============================================================ */
+
+/* ============================================================
+   INVESTMENT NORMALIZATION
+   ============================================================ */
+
+function normalizeInvestment(input) {
+  const soldDate = String(input?.soldDate ?? "").trim();
+
+  return {
+    name: String(input?.name ?? "").trim(),
+
+    amount: Math.max(0, num(input?.amount)),
+
+    purchaseDate: String(input?.purchaseDate ?? "").trim(),
+
+    soldDate,
+
+    profit: soldDate ? num(input?.profit) : 0,
+  };
+}
 
 function normalizeIpo(input, fallbackId) {
   const investment = num(input?.investment ?? input?.totalInvestment);
@@ -141,7 +207,7 @@ function normalizeApplicant(input) {
    DASHBOARD
    ============================================================ */
 
-function buildDashboard(ipos) {
+function buildDashboard(ipos, capital) {
   const totalIpos = ipos.length;
 
   const totalApplications = ipos.reduce(
@@ -168,15 +234,6 @@ function buildDashboard(ipos) {
    */
   const roi = totalInvestment > 0 ? (totalProfit / totalInvestment) * 100 : 0;
 
-  /*
-   * Total Amount represents:
-   *
-   * Investment + Profit
-   *
-   * No hard-coded amount.
-   */
-  const totalAmount = 530000 + totalProfit;
-
   return {
     "Total IPOs": totalIpos,
 
@@ -188,7 +245,19 @@ function buildDashboard(ipos) {
 
     "Total Profit": totalProfit,
 
-    "Total Amount": totalAmount,
+    "Initial Capital": capital.initialCapital,
+
+    "Stock Investment": capital.stockInvestment,
+
+    "Stock Profit/Loss": capital.stockProfit,
+
+    "Available Capital": capital.availableCapital,
+
+    /*
+     * "Total Amount" is kept for backward compatibility with the
+     * current frontend. It now equals Available Capital.
+     */
+    "Total Amount": capital.availableCapital,
 
     ROI: roi,
   };
@@ -222,10 +291,37 @@ function updateState(data) {
     beneficiaryId: maskId(applicant.beneficiaryId),
   }));
 
+  const totalProfit = ipos.reduce((sum, ipo) => sum + num(ipo.profit), 0);
+
+  const investments = (Array.isArray(data?.investments) ? data.investments : [])
+    .map(normalizeInvestment)
+    .filter((x) => x.name);
+
+  const stockInvestment = investments
+    .filter((x) => !x.soldDate)
+    .reduce((sum, x) => sum + x.amount, 0);
+
+  const stockProfit = investments
+    .filter((x) => x.soldDate)
+    .reduce((sum, x) => sum + x.profit, 0);
+
+  const capital = normalizeCapital(
+    {
+      initialCapital: data?.capital?.initialCapital,
+      stockInvestment,
+      stockProfit,
+    },
+    totalProfit,
+  );
+
   const now = new Date();
 
   state = {
-    dashboard: buildDashboard(ipos),
+    dashboard: buildDashboard(ipos, capital),
+
+    capital,
+
+    investments,
 
     ipos,
 
@@ -242,6 +338,10 @@ function updateState(data) {
 
   console.log(
     `Synced Google Sheets: ${ipos.length} IPOs, ${sensitiveApplicants.length} applicants`,
+  );
+
+  console.log(
+    `Capital: initial=${capital.initialCapital}, stocks=${capital.stockInvestment}, available=${capital.availableCapital}`,
   );
 
   console.log(`Next automatic sync: ${state.nextSync}`);
@@ -366,6 +466,22 @@ app.get("/api/dashboard", (_req, res) => {
 });
 
 /* ============================================================
+   CAPITAL
+   ============================================================ */
+
+app.get("/api/capital", (_req, res) => {
+  res.json({
+    capital: state.capital,
+
+    lastSynced: state.lastSynced,
+
+    nextSync: state.nextSync,
+
+    error: state.error,
+  });
+});
+
+/* ============================================================
    IPOs
    ============================================================ */
 
@@ -396,6 +512,22 @@ app.get("/api/applicants", (_req, res) => {
 /* ============================================================
    ADMIN LOGIN
    ============================================================ */
+
+/* ============================================================
+   INVESTMENTS (read only)
+   ============================================================ */
+
+app.get("/api/investments", (_req, res) => {
+  res.json({
+    data: state.investments,
+
+    total: state.capital.stockInvestment,
+
+    lastSynced: state.lastSynced,
+
+    nextSync: state.nextSync,
+  });
+});
 
 app.post("/api/admin/login", (req, res) => {
   if (!requirePin(req, res)) {
@@ -436,6 +568,8 @@ app.get("/api/admin/data", (req, res) => {
     ipos: state.ipos,
 
     applicants: state.sensitiveApplicants,
+
+    investments: state.investments,
 
     lastSynced: state.lastSynced,
 
@@ -566,6 +700,62 @@ app.put("/api/admin/applicants", async (req, res) => {
     });
   } catch (error) {
     console.error("Save applicants failed:", error);
+
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/* ============================================================
+   ADMIN SAVE INVESTMENTS
+   ============================================================ */
+
+app.put("/api/admin/investments", async (req, res) => {
+  if (!requirePin(req, res)) {
+    return;
+  }
+
+  try {
+    const incoming = Array.isArray(req.body?.investments)
+      ? req.body.investments
+      : [];
+
+    const investments = incoming.map(normalizeInvestment);
+
+    if (investments.some((x) => !x.name)) {
+      return res.status(400).json({
+        error: "Every investment must have a name.",
+      });
+    }
+
+    console.log(`Saving ${investments.length} investments to Google Sheets...`);
+
+    await writeInvestmentsRemote(investments);
+
+    const ok = await syncFromGoogle();
+
+    if (!ok) {
+      return res.status(500).json({
+        error:
+          state.error ||
+          "Saved, but could not refresh data from Google Sheets.",
+      });
+    }
+
+    res.json({
+      ok: true,
+
+      investments: state.investments,
+
+      capital: state.capital,
+
+      dashboard: state.dashboard,
+
+      lastSynced: state.lastSynced,
+    });
+  } catch (error) {
+    console.error("Save investments failed:", error);
 
     res.status(500).json({
       error: error instanceof Error ? error.message : String(error),
